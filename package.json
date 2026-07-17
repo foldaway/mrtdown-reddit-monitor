@@ -1,0 +1,12 @@
+{
+  "name": "mrtdown-reddit-monitor",
+  "version": "1.0.0",
+  "description": "Stateful Reddit thread and reply monitoring for MRTDown community signals.",
+  "license": "MIT",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
