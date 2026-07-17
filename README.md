@@ -2,9 +2,21 @@
 
 Stateful Reddit thread and reply monitoring for MRTDown community signals.
 
-> This repository currently contains the design boundary only. The Cloudflare
-> Worker, D1 schema, tests, and deployment configuration have not been
-> scaffolded yet.
+> This repository currently contains the design boundary and a placeholder
+> Cloudflare Worker. Reddit integration, the D1 schema, and deployment
+> environments have not been implemented yet.
+
+## Repository Guide
+
+- [Agent guide](AGENTS.md) maps the commands, invariants, and sources of truth.
+- [Architecture](ARCHITECTURE.md) distinguishes the current scaffold from the
+  intended runtime slices.
+- [Repository knowledge map](docs/README.md) indexes design, quality,
+  reliability, security, and execution-plan documents.
+
+Install the locked dependencies with `npm ci`, run the Worker with
+`npm run dev`, and run the complete deterministic validation suite with
+`npm run check`.
 
 ## Purpose
 
@@ -322,8 +334,9 @@ deletion propagation.
 
 ## Development Status
 
-There are no install, development, test, migration, or deployment commands yet.
-When scaffolding is added, the repository should provide at least:
+The repository provides install, local Worker, formatting, linting, typecheck,
+smoke-test, documentation-validation, and CI workflows. It does not yet provide
+D1 migration or deployment workflows. Runtime implementation should add:
 
 - deterministic unit tests for discovery filtering, conversation diffs, event
   IDs, stale-version ordering, deletion, backoff, and author-key derivation;
@@ -372,6 +385,5 @@ threads and comments that exercise the same event shapes.
 
 ## License
 
-Add an explicit code license when the Worker is scaffolded. Reddit user content
-is third-party content and is not covered by any future repository code
-license.
+Repository code is available under the [MIT License](LICENSE). Reddit user
+content is third-party content and is not covered by that license.

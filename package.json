@@ -7,8 +7,15 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run docs:check",
     "dev": "wrangler dev",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "docs:check": "node scripts/check-docs.mjs",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {
