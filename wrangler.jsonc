@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mrtdown-reddit-monitor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-15",
+  "observability": {
+    "logs": { "enabled": true }
+  }
+}
