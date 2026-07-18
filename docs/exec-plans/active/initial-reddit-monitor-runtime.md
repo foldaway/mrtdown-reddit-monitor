@@ -73,6 +73,10 @@ pending and only after a deployed Cloudflare canary succeeds.
   design as unnecessary for the measured workload.
 - 2026-07-18: Replaced the monitor boundary with direct programmatic crowd
   reports and a fixed per-thread Workflow schedule.
+- 2026-07-18: Implemented the first runtime slice: validated configuration,
+  parser decisions, site delivery requests and acknowledgements, and bounded
+  public Reddit conversation JSON. Added synthetic boundary fixtures and 12
+  deterministic tests without adding a runtime dependency.
 
 ## Decisions
 
@@ -88,6 +92,10 @@ pending and only after a deployed Cloudflare canary succeeds.
   until demonstrated need.
 - Preserve the proven crawler until shadow coverage and one complete 24-hour
   Workflow have been observed.
+- Boundary errors contain stable categories rather than untrusted values, and
+  normalized Reddit source objects never expose author identity.
+- Site acknowledgement parsing requires only the planned report ID and
+  moderation status so additive response metadata remains compatible.
 
 ## Validation
 
@@ -98,6 +106,11 @@ No deterministic validation command may call Reddit or the deployed site.
 Before cutover, record shadow discovery comparison, reply usefulness, parser
 false positives/negatives, delivery retry behavior, and a complete Workflow
 timeline here.
+
+Implementation validation:
+
+- 2026-07-18: `npm run check` passed with 4 test files and 13 tests after the
+  validated-contract slice.
 
 ## Follow-ups
 

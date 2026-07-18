@@ -23,9 +23,11 @@ authenticated crowd report at a time.
 ## Current state
 
 The repository has a placeholder Worker entry point that returns `204`, test
-and validation harnesses, and design documents. There are no Reddit calls, D1
-migrations, scheduled handlers, Workflow bindings, parsers, or delivery calls
-on this baseline.
+and validation harnesses, and the first validated-contract slice. Runtime
+configuration, public Reddit conversation JSON, semantic-parser decisions, and
+site requests/responses are normalized at explicit boundaries. There are no
+Reddit calls, D1 migrations, scheduled handlers, Workflow bindings, semantic
+parser implementation, or delivery calls yet.
 
 ## Runtime slices
 

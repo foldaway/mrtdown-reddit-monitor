@@ -1,0 +1,66 @@
+[
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t3",
+          "data": {
+            "name": "t3_synthetic1",
+            "subreddit": "syntheticTransit",
+            "permalink": "/r/syntheticTransit/comments/synthetic1/fixture/",
+            "created_utc": 1784336400,
+            "edited": false,
+            "title": "Synthetic service condition",
+            "selftext": "Synthetic source text for a delayed service.",
+            "removed_by_category": null
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t1",
+          "data": {
+            "name": "t1_synthetic2",
+            "link_id": "t3_synthetic1",
+            "parent_id": "t3_synthetic1",
+            "subreddit": "syntheticTransit",
+            "permalink": "/r/syntheticTransit/comments/synthetic1/fixture/synthetic2/",
+            "created_utc": 1784336460,
+            "edited": 1784336520,
+            "body": "[removed]",
+            "removed_by_category": "moderator",
+            "replies": {
+              "kind": "Listing",
+              "data": {
+                "children": [
+                  {
+                    "kind": "t1",
+                    "data": {
+                      "name": "t1_synthetic3",
+                      "link_id": "t3_synthetic1",
+                      "parent_id": "t1_synthetic2",
+                      "subreddit": "syntheticTransit",
+                      "permalink": "/r/syntheticTransit/comments/synthetic1/fixture/synthetic3/",
+                      "created_utc": 1784336580,
+                      "edited": false,
+                      "body": "[deleted]",
+                      "removed_by_category": null,
+                      "replies": ""
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        { "kind": "more", "data": { "count": 1 } }
+      ]
+    }
+  }
+]
