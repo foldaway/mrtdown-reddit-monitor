@@ -82,6 +82,11 @@ pending and only after a deployed Cloudflare canary succeeds.
   one Workflow identity per selected thread. Added deterministic content and
   report IDs plus D1-backed tests for replay, edits, removal purge, pending
   retry state, and acknowledgement.
+- 2026-07-18: Reimplemented the bounded public-shadow conversation transport
+  against the simplified source-object contract. It uses one Reddit origin,
+  conditional validators, response byte limits, safe response metadata, and
+  explicit authentication, block, rate-limit, content-type, and shape errors.
+  The transport remains unwired until discovery and Workflow services land.
 
 ## Decisions
 
@@ -107,6 +112,9 @@ pending and only after a deployed Cloudflare canary succeeds.
   version purges retained text for every stored version of that object.
 - Late, previously unseen active versions are stored as superseded rather than
   replacing the deterministic current version.
+- Public-shadow conversation access has one allowed origin and no automatic
+  fallback. It returns only bounded cache/rate-limit metadata and normalized
+  source objects; response bodies never enter transport errors.
 
 ## Validation
 
@@ -125,12 +133,14 @@ Implementation validation:
 - 2026-07-18: `npm run check` passed with 5 test files and 18 tests after the
   D1 storage slice, including formatting, lint, types, tests, and documentation
   validation.
+- 2026-07-18: `npm run check` passed with 6 test files and 25 tests after the
+  bounded public-shadow transport slice, including formatting, lint, types,
+  tests, and documentation validation.
 
 ## Follow-ups
 
-- Selectively recover or reimplement the bounded public JSON parser and
-  transport from the preserved `backup` tag if it still matches the minimal
-  source-object model.
+- Implement bounded RSS shadow discovery and feed its new thread identities
+  through the public conversation transport before storing source versions.
 - Remove Reddit from `mrtdown-data-crawler` in a separate change after the
   rollback window.
 - Consider generated contract artifacts, Queues, longer watches, or author
