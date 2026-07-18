@@ -5,9 +5,10 @@ Reddit post and reply monitoring for MRTDown crowd reports.
 > The repository currently contains a Cloudflare Worker scaffold, validated
 > boundary contracts, the initial D1 repository, and bounded public-shadow
 > RSS search/conversation transports with D1-backed discovery and conversation
-> snapshot services. Scheduled
-> runtime wiring, Cloudflare Workflows, semantic parsing, and delivery calls are
-> not yet implemented.
+> snapshot services. Public-shadow discovery is wired to a five-minute
+> scheduled handler with durable D1-backed rate-limit and stop state. Semantic
+> parsing, selection, Cloudflare Workflows, and delivery calls are not yet
+> implemented.
 
 ## Repository Guide
 
@@ -223,6 +224,11 @@ for this volume; add Queues only after measuring a concrete problem.
 - Use synthetic Reddit-shaped fixtures in tests.
 
 ## Configuration
+
+`wrangler.jsonc` defines the current public-shadow mode, discovery communities
+and query, Reddit contact, site ingest URL, and required secret names. Run
+`npm run cf-typegen` after changing those bindings; runtime code consumes the
+generated `Env` interface.
 
 Expected secrets:
 

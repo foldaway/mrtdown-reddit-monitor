@@ -99,6 +99,14 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
   stores all observed versions, replays idempotently, preserves replies absent
   from later feeds, and creates a new pending version when the root post is
   edited with rectification information.
+- 2026-07-19: Wired public-shadow discovery to a five-minute scheduled handler.
+  A D1-backed access policy checks before every Reddit request, persists
+  `Retry-After` and exhausted-quota pauses, and stops shadow access on terminal
+  or repeated unsafe responses. Scheduled logs contain normalized outcomes and
+  counts only; D1 and configuration failures still fail the invocation.
+- 2026-07-19: Declared scheduled runtime variables and required secret names in
+  `wrangler.jsonc`, regenerated the Worker `Env` interface, and removed the
+  manually maintained scheduled-environment type.
 
 ## Decisions
 
@@ -141,6 +149,15 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
 - Every conversation snapshot includes the root post. Root content edits are
   versioned and re-evaluated because authors may add a rectification; an object
   absent from a later feed is not considered removed.
+- Public-shadow access stops immediately on `401`, `403`, or an unexpected
+  content type; two consecutive `429` responses or three consecutive malformed
+  or oversized shapes also stop access. A successful response resets the
+  consecutive-failure counters. Disabled state requires deliberate operator
+  inspection and reset rather than automatic recovery.
+- A successful response reporting zero remaining quota pauses additional
+  requests in the same invocation until its reset timestamp, or for five
+  minutes when Reddit omits the reset. A `429` without usable backoff metadata
+  pauses for fifteen minutes.
 
 ## Validation
 
@@ -170,11 +187,15 @@ Implementation validation:
   bounded transport behavior, parentless reply storage, snapshot replay and
   absence semantics, transport-neutral identity, and root-post rectification
   versions.
+- 2026-07-19: `npm run check` passed with 12 test files and 46 tests after the
+  scheduled discovery slice, including D1-backed quota pauses, repeated-rate
+  and shape-failure stops, runtime replay, safe structured outcomes, and
+  generated Cloudflare types.
 
 ## Follow-ups
 
-- Wire the discovery service to a five-minute scheduled handler with durable
-  Reddit backoff state before enabling shadow traffic.
+- Deploy a public-shadow canary and verify the scheduled handler from the
+  Cloudflare runtime before enabling sustained shadow traffic.
 - Remove Reddit from `mrtdown-data-crawler` in a separate change after the
   rollback window.
 - Consider generated contract artifacts, Queues, longer watches, or author

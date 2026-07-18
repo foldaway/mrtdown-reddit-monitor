@@ -1,0 +1,118 @@
+import { applyD1Migrations, env } from 'cloudflare:test';
+import type { D1Migration } from '@cloudflare/vitest-pool-workers';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { runScheduledDiscovery } from '../src/runtime/scheduled-discovery.js';
+import { syntheticRedditConversationFeed } from './fixtures/reddit-conversation-feed.js';
+import { syntheticRedditSearchFeed } from './fixtures/reddit-search-feed.js';
+
+const NOW = new Date('2026-07-19T01:00:00Z');
+const testEnv = env as typeof env & { TEST_MIGRATIONS: D1Migration[] };
+const singleCandidateSearchFeed = syntheticRedditSearchFeed.replace(
+  / {2}<entry>\n {4}<id>t3_synthetic2[\s\S]*? {2}<\/entry>\n/,
+  '',
+);
+
+function runtimeEnv(): Env {
+  return {
+    DB: testEnv.DB,
+    REDDIT_TRANSPORT_MODE: 'public-shadow',
+    REDDIT_USER_AGENT_CONTACT: 'ops@example.invalid',
+    REDDIT_SUBREDDITS: 'singapore',
+    REDDIT_DISCOVERY_QUERY: 'synthetic rail condition',
+    MRTDOWN_SITE_INGEST_URL:
+      'https://example.invalid/internal/api/crowd-reports',
+    MRTDOWN_SITE_INGEST_TOKEN: 'synthetic-site-token',
+  };
+}
+
+describe('scheduled Reddit discovery runtime', () => {
+  beforeEach(async () => {
+    await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare('DELETE FROM reddit_source_objects'),
+      testEnv.DB.prepare('DELETE FROM reddit_threads'),
+      testEnv.DB.prepare('DELETE FROM reddit_transport_state'),
+    ]);
+  });
+
+  it('wires public-shadow discovery and replays without refetching an existing conversation', async () => {
+    const log = vi.fn();
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const request = new Request(input);
+      if (request.url.includes('/search.rss')) {
+        return new Response(singleCandidateSearchFeed, {
+          status: 200,
+          headers: { 'content-type': 'application/atom+xml' },
+        });
+      }
+      return new Response(syntheticRedditConversationFeed, {
+        status: 200,
+        headers: { 'content-type': 'application/atom+xml' },
+      });
+    });
+    const dependencies = { fetch, now: () => NOW, log };
+
+    await expect(
+      runScheduledDiscovery(runtimeEnv(), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      discovery: {
+        insertedSourceVersionCount: 1,
+        fetchedConversationCount: 1,
+      },
+    });
+    await expect(
+      runScheduledDiscovery(runtimeEnv(), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      discovery: {
+        existingThreadCount: 1,
+        fetchedConversationCount: 0,
+      },
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(log).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        event: 'reddit_discovery_completed',
+        existingThreadCount: 1,
+      }),
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain(
+      'Synthetic delay on the Circle Line',
+    );
+    expect(
+      await testEnv.DB.prepare(
+        'SELECT COUNT(*) AS count FROM reddit_source_objects',
+      ).first('count'),
+    ).toBe(1);
+  });
+
+  it('records a rate limit and skips the next scheduled invocation during backoff', async () => {
+    const log = vi.fn();
+    const fetch = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 429,
+          headers: { 'retry-after': '60' },
+        }),
+    );
+    const dependencies = { fetch, now: () => NOW, log };
+
+    await expect(
+      runScheduledDiscovery(runtimeEnv(), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'transport_error',
+      category: 'rate_limited',
+      resumeAt: '2026-07-19T01:01:00.000Z',
+    });
+    await expect(
+      runScheduledDiscovery(runtimeEnv(), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'paused',
+      reason: 'backoff',
+      resumeAt: '2026-07-19T01:01:00.000Z',
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

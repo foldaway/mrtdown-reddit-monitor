@@ -1,6 +1,6 @@
 # Security and privacy
 
-Status: Boundary and D1 source-content controls implemented; release controls incomplete
+Status: Boundary, source-content, and public-shadow stop controls implemented
 
 Last verified: 2026-07-18
 
@@ -23,6 +23,9 @@ programmatic-report request.
   justifies a pseudonymous, short-lived replacement.
 - Bound stored title/body retention and purge removed content.
 - Restrict source permalinks to allowed Reddit HTTPS origins.
+- Keep public-shadow pause and stop decisions durable. Authentication, block,
+  unexpected-content-type, repeated-rate-limit, and sustained-shape failures
+  must prevent later scheduled requests until the state is deliberately reset.
 
 ## Logging
 

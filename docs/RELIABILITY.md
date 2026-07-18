@@ -1,6 +1,6 @@
 # Reliability
 
-Status: Discovery storage path implemented; runtime handlers pending
+Status: Scheduled discovery and durable Reddit access policy implemented
 
 Last verified: 2026-07-18
 
@@ -47,7 +47,8 @@ site response categories, and Reddit rate-limit state.
 D1-backed tests now cover discovery replay, candidate/conversation identity
 verification, flat conversation snapshot replay, edited root posts, RSS absence
 semantics, repeated storage, one-Workflow-identity behavior, source-version
-deduplication, and durable pending delivery. Before shadow traffic, add the
-semantic parser, scheduled runtime wiring, and service-level retry tests.
-Before cutover, exercise credential failure, rate limiting, a failed Workflow
-step, and a temporary site outage.
+deduplication, durable pending delivery, quota exhaustion, repeated rate limits,
+sustained malformed responses, and scheduled backoff replay. Before shadow
+traffic, add the semantic parser and deployed public-shadow canary. Before
+cutover, exercise credential failure, a failed Workflow step, and a temporary
+site outage.

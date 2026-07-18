@@ -3,6 +3,19 @@
   "name": "mrtdown-reddit-monitor",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-15",
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "vars": {
+    "REDDIT_TRANSPORT_MODE": "public-shadow",
+    "REDDIT_USER_AGENT_CONTACT": "https://www.mrtdown.org",
+    "REDDIT_SUBREDDITS": "singapore,askSingapore",
+    "REDDIT_DISCOVERY_QUERY": "mrt OR train",
+    "MRTDOWN_SITE_INGEST_URL": "https://www.mrtdown.org/internal/api/crowd-reports"
+  },
+  "secrets": {
+    "required": ["MRTDOWN_SITE_INGEST_TOKEN"]
+  },
   "d1_databases": [
     {
       "binding": "DB",

@@ -22,19 +22,23 @@ authenticated crowd report at a time.
 
 ## Current state
 
-The repository has a placeholder Worker entry point that returns `204`, test
-and validation harnesses, validated contracts, the first D1 repository slice,
-and bounded public-shadow RSS transports for search and selected conversations.
+The repository has a placeholder HTTP entry point that returns `204`, test and
+validation harnesses, validated contracts, the first D1 repository slice, and
+bounded public-shadow RSS transports for search and selected conversations.
 A discovery service accepts only validated search-feed identities, skips known
 threads, resolves new identities through the selected post's RSS feed, verifies
-the normalized root, and stores its source version in D1. A conversation
-snapshot service stores the root and flat replies without guessing parent
-relationships or treating feed absence as removal. Runtime configuration,
-Reddit responses, semantic-parser decisions, site requests/responses, and
-stored D1 rows are normalized at explicit boundaries. The migration enforces
-version evaluation, delivery, and one-Workflow-identity invariants. Discovery
-and snapshots are not wired to the Worker; there are no scheduled handlers,
-Workflow bindings, semantic parser implementation, or delivery calls yet.
+the normalized root, and stores its source version in D1. A five-minute
+scheduled handler wires that service to public-shadow transports through a
+durable access policy. The policy pauses requests until `Retry-After` or quota
+reset, and disables shadow access after terminal or repeated unsafe responses.
+A conversation snapshot service stores the root and flat replies without
+guessing parent relationships or treating feed absence as removal. Runtime
+configuration, Reddit responses, semantic-parser decisions, site
+requests/responses, and stored D1 rows are normalized at explicit boundaries.
+The migrations enforce version evaluation, delivery, one-Workflow-identity,
+and Reddit access-state invariants. Conversation snapshots are not yet wired to
+a Workflow; there are no Workflow bindings, semantic parser implementation, or
+delivery calls yet.
 
 ## Runtime slices
 
@@ -54,7 +58,10 @@ validated contracts -> D1 repository -> discovery/workflow services -> Worker en
   schedule and evaluates new replies.
 - **Delivery service** maps a parsed source object to the site's programmatic
   crowd-report request and records acknowledgement.
-- **Worker entry points** adapt scheduled events and Cloudflare Workflows.
+- **Worker entry points** adapt scheduled events and, later, Cloudflare
+  Workflows. Scheduled discovery currently catches normalized Reddit transport
+  failures after their pause/stop state is durable; storage and programming
+  failures still fail the invocation.
 
 Reddit transport, parsing, time, and site transport should be injected so tests
 remain deterministic. Add abstraction only where one of those boundaries needs

@@ -11,13 +11,18 @@ const projectDirectory = path.dirname(fileURLToPath(import.meta.url));
 const testMigrations = await readD1Migrations(
   path.join(projectDirectory, 'migrations'),
 );
+const syntheticSiteIngestToken = 'synthetic-test-site-token';
+process.env.MRTDOWN_SITE_INGEST_TOKEN = syntheticSiteIngestToken;
 
 export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: './wrangler.jsonc' },
       miniflare: {
-        bindings: { TEST_MIGRATIONS: testMigrations },
+        bindings: {
+          MRTDOWN_SITE_INGEST_TOKEN: syntheticSiteIngestToken,
+          TEST_MIGRATIONS: testMigrations,
+        },
       },
     }),
   ],
