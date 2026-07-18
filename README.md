@@ -3,8 +3,9 @@
 Reddit post and reply monitoring for MRTDown crowd reports.
 
 > The repository currently contains a Cloudflare Worker scaffold, validated
-> boundary contracts, and design documents. Reddit discovery, D1 storage,
-> Cloudflare Workflows, semantic parsing, and delivery are not yet implemented.
+> boundary contracts, and the initial D1 repository. Reddit discovery,
+> Cloudflare Workflows, semantic parsing, and delivery calls are not yet
+> implemented.
 
 ## Repository Guide
 

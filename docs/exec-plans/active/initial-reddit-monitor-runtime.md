@@ -77,6 +77,11 @@ pending and only after a deployed Cloudflare canary succeeds.
   parser decisions, site delivery requests and acknowledgements, and bounded
   public Reddit conversation JSON. Added synthetic boundary fixtures and 12
   deterministic tests without adding a runtime dependency.
+- 2026-07-18: Added the initial D1 migration and repository. D1 uniqueness and
+  checks now enforce source-version evaluation, durable pending delivery, and
+  one Workflow identity per selected thread. Added deterministic content and
+  report IDs plus D1-backed tests for replay, edits, removal purge, pending
+  retry state, and acknowledgement.
 
 ## Decisions
 
@@ -96,6 +101,12 @@ pending and only after a deployed Cloudflare canary succeeds.
   normalized Reddit source objects never expose author identity.
 - Site acknowledgement parsing requires only the planned report ID and
   moderation status so additive response metadata remains compatible.
+- Source content versions and external report IDs use domain-separated SHA-256
+  identities so retries and transport changes do not alter stored identity.
+- Source title/body text is cleared after evaluation. A removed or deleted
+  version purges retained text for every stored version of that object.
+- Late, previously unseen active versions are stored as superseded rather than
+  replacing the deterministic current version.
 
 ## Validation
 
@@ -111,6 +122,9 @@ Implementation validation:
 
 - 2026-07-18: `npm run check` passed with 4 test files and 13 tests after the
   validated-contract slice.
+- 2026-07-18: `npm run check` passed with 5 test files and 18 tests after the
+  D1 storage slice, including formatting, lint, types, tests, and documentation
+  validation.
 
 ## Follow-ups
 

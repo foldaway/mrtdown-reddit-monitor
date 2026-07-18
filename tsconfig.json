@@ -9,7 +9,11 @@
     // See also https://aka.ms/tsconfig/module
     "module": "nodenext",
     "target": "esnext",
-    "types": ["node", "./worker-configuration.d.ts"],
+    "types": [
+      "node",
+      "@cloudflare/vitest-pool-workers/types",
+      "./worker-configuration.d.ts"
+    ],
     // For nodejs:
     // "lib": ["esnext"],
     // "types": ["node"],

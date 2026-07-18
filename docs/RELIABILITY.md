@@ -1,6 +1,6 @@
 # Reliability
 
-Status: Target guarantees; not yet implemented
+Status: Storage guarantees implemented; runtime services pending
 
 Last verified: 2026-07-18
 
@@ -40,7 +40,8 @@ site response categories, and Reddit rate-limit state.
 
 ## Validation milestones
 
-Before shadow traffic, add deterministic transport/parser fakes and D1-backed
-tests for repeated discovery, one-Workflow-per-thread behavior, source-version
-deduplication, and delivery retry. Before cutover, exercise credential failure,
-rate limiting, a failed Workflow step, and a temporary site outage.
+D1-backed tests now cover repeated storage, one-Workflow-identity behavior,
+source-version deduplication, and durable pending delivery. Before shadow
+traffic, add deterministic transport/parser fakes and service-level retry
+tests. Before cutover, exercise credential failure, rate limiting, a failed
+Workflow step, and a temporary site outage.

@@ -1,6 +1,6 @@
 # Security and privacy
 
-Status: Required controls; implementation incomplete
+Status: Boundary and D1 source-content controls implemented; release controls incomplete
 
 Last verified: 2026-07-18
 
@@ -33,8 +33,8 @@ payloads are not logged accidentally.
 
 Before production access, review current Reddit terms and deletion guidance,
 validate producer-secret rotation, verify least-privilege Cloudflare bindings,
-test bounded source-content deletion, and document credential failure and
-rotation.
+extend the tested evaluation/removal purge behavior with a time-based retention
+window, and document credential failure and rotation.
 
 Report vulnerabilities privately to the repository owner; do not open a public
 issue containing credentials, personal data, or exploitable details.

@@ -3,6 +3,13 @@
   "name": "mrtdown-reddit-monitor",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-15",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mrtdown-reddit-monitor",
+      "migrations_dir": "migrations"
+    }
+  ],
   "observability": {
     "logs": { "enabled": true }
   }

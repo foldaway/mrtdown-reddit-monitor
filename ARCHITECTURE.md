@@ -23,11 +23,13 @@ authenticated crowd report at a time.
 ## Current state
 
 The repository has a placeholder Worker entry point that returns `204`, test
-and validation harnesses, and the first validated-contract slice. Runtime
-configuration, public Reddit conversation JSON, semantic-parser decisions, and
-site requests/responses are normalized at explicit boundaries. There are no
-Reddit calls, D1 migrations, scheduled handlers, Workflow bindings, semantic
-parser implementation, or delivery calls yet.
+and validation harnesses, validated contracts, and the first D1 repository
+slice. Runtime configuration, public Reddit conversation JSON,
+semantic-parser decisions, site requests/responses, and stored D1 rows are
+normalized at explicit boundaries. The migration enforces version evaluation,
+delivery, and one-Workflow-identity invariants. There are no Reddit calls,
+scheduled handlers, Workflow bindings, semantic parser implementation, or
+delivery calls yet.
 
 ## Runtime slices
 
@@ -39,8 +41,9 @@ validated contracts -> D1 repository -> discovery/workflow services -> Worker en
 
 - **Validated contracts** parse Reddit responses, configuration, parser
   results, and site responses.
-- **D1 repository** stores discovered threads and source objects together with
-  parsing and delivery state.
+- **D1 repository** stores discovered threads and versioned source objects
+  together with parsing and delivery state. Raw source text is cleared after
+  evaluation and purged across versions when Reddit reports removal.
 - **Discovery service** finds and evaluates new candidate posts.
 - **Workflow service** revisits one selected thread at the fixed polling
   schedule and evaluates new replies.
