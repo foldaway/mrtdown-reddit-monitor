@@ -1,4 +1,15 @@
 import { fail, isRecord } from './validation.js';
+import type {
+  RedditConversation,
+  RedditSourceLifecycle,
+  RedditSourceObject,
+} from './reddit-source.js';
+
+export type {
+  RedditConversation,
+  RedditSourceLifecycle,
+  RedditSourceObject,
+} from './reddit-source.js';
 
 const BOUNDARY = 'reddit_public_json';
 const FULLNAME_PATTERN = /^(?:t1|t3)_[a-z0-9]+$/;
@@ -9,29 +20,6 @@ export const REDDIT_PUBLIC_JSON_LIMITS = {
   maximumObjects: 500,
   maximumNestingDepth: 32,
 } as const;
-
-export type RedditSourceLifecycle = 'active' | 'removed' | 'deleted';
-export type RedditSourceKind = 'post' | 'reply';
-
-export interface RedditSourceObject {
-  sourceKind: RedditSourceKind;
-  externalId: string;
-  threadExternalId: string;
-  parentExternalId: string | null;
-  subreddit: string;
-  lifecycle: RedditSourceLifecycle;
-  sourceUrl: string | null;
-  createdAt: string;
-  editedAt: string | null;
-  title: string | null;
-  body: string | null;
-}
-
-export interface RedditConversation {
-  objects: RedditSourceObject[];
-  rejectedObjectCount: number;
-  unsupportedObjectCount: number;
-}
 
 export function parsePublicRedditConversationJson(
   json: string,
