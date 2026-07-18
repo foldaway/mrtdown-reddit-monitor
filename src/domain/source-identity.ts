@@ -1,4 +1,4 @@
-import type { RedditSourceObject } from '../contracts/reddit-public-json.js';
+import type { RedditSourceObject } from '../contracts/reddit-source.js';
 
 const encoder = new TextEncoder();
 
@@ -7,16 +7,12 @@ export async function computeContentVersion(
 ): Promise<string> {
   return sha256Hex(
     JSON.stringify([
-      'reddit-source-v1',
+      'reddit-source-v2',
       source.sourceKind,
       source.externalId,
       source.threadExternalId,
-      source.parentExternalId,
       source.subreddit,
       source.lifecycle,
-      source.sourceUrl,
-      source.createdAt,
-      source.editedAt,
       source.title,
       source.body,
     ]),

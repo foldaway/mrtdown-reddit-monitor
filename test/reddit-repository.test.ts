@@ -2,7 +2,7 @@ import { applyD1Migrations, env } from 'cloudflare:test';
 import type { D1Migration } from '@cloudflare/vitest-pool-workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { RedditSourceObject } from '../src/contracts/reddit-public-json.js';
+import type { RedditSourceObject } from '../src/contracts/reddit-source.js';
 import {
   computeContentVersion,
   computeExternalReportId,
@@ -57,6 +57,15 @@ describe('RedditRepository', () => {
     const repository = new RedditRepository(env.DB);
     const source = syntheticPost();
     const contentVersion = await computeContentVersion(source);
+    expect(
+      await computeContentVersion({
+        ...source,
+        sourceUrl:
+          'https://www.reddit.com/r/singapore/comments/synthetic1/changed-slug/',
+        createdAt: '2026-07-17T23:59:59.000Z',
+        editedAt: '2026-07-18T00:00:01.000Z',
+      }),
+    ).toBe(contentVersion);
 
     const first = await repository.storeSourceVersion(
       source,

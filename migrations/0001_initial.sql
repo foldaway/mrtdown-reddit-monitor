@@ -55,7 +55,7 @@ CREATE TABLE reddit_source_objects (
     REFERENCES reddit_threads (thread_external_id, subreddit),
   CHECK (
     (source_kind = 'post' AND source_external_id = thread_external_id AND parent_external_id IS NULL)
-    OR (source_kind = 'reply' AND parent_external_id IS NOT NULL)
+    OR source_kind = 'reply'
   ),
   CHECK (
     lifecycle = 'active'

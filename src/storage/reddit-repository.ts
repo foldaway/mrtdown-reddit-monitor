@@ -2,7 +2,7 @@ import {
   parseParserDecision,
   type CrowdReport,
 } from '../contracts/crowd-report.js';
-import type { RedditSourceObject } from '../contracts/reddit-public-json.js';
+import type { RedditSourceObject } from '../contracts/reddit-source.js';
 import {
   parseCrowdReportDeliveryRequest,
   parseSiteAcceptedResponse,
@@ -699,9 +699,6 @@ function validateSource(source: RedditSourceObject): void {
       source.parentExternalId !== null)
   ) {
     throw new StorageInvariantError('post_identity');
-  }
-  if (source.sourceKind === 'reply' && source.parentExternalId === null) {
-    throw new StorageInvariantError('reply_parent');
   }
   if (source.parentExternalId !== null) {
     validateFullname(source.parentExternalId, 'parent_external_id');
