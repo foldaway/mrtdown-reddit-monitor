@@ -1,6 +1,5 @@
 # Active execution plans
 
-No active execution plans.
-
-Add each plan here when work begins and remove it when the completed plan moves
-to the completed index.
+- [Initial Reddit monitor runtime](initial-reddit-monitor-runtime.md) — build
+  discovery, minimal D1 state, fixed reply Workflows, parsing, and programmatic
+  crowd-report delivery.

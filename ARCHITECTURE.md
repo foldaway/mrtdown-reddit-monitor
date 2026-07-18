@@ -1,64 +1,74 @@
 # Architecture
 
-Status: Current scaffold and intended implementation boundary
+Status: Intended minimal runtime boundary
 
-Last verified: 2026-07-17
+Last verified: 2026-07-18
 
 ## System context
 
-`mrtdown-reddit-monitor` is a Cloudflare Worker acquisition adapter. It observes
-Reddit conversations and delivers versioned source events to `mrtdown-site`.
-The site owns classification, moderation, confidence, and public presentation;
-`mrtdown-data` owns accepted canonical evidence.
+`mrtdown-reddit-monitor` is a Cloudflare Worker that turns useful Reddit posts
+and replies into structured crowd reports.
 
 ```text
-Reddit Data API
-  -> this Worker: discover, watch, version, retain briefly, retry delivery
-  -> mrtdown-site: classify, moderate, correlate, publish community signals
-  -> mrtdown-data: store accepted canonical evidence and impact
+Reddit
+  -> this Worker: discover, store, parse, revisit, retry
+  -> mrtdown-site: ingest a generic programmatic crowd report
+  -> existing crowd-report moderation, clustering, and dispatch
 ```
+
+The Worker owns all Reddit-specific state and interpretation. The site neither
+stores conversations nor understands Reddit object shapes. The boundary is one
+authenticated crowd report at a time.
 
 ## Current state
 
-The repository currently has one Worker entry point that returns `204`. There
-are no Reddit calls, scheduled handlers, D1 bindings, migrations, or delivery
-routes yet. The gap is intentional: documents describing the target must not be
-mistaken for implemented behavior.
+The repository has a placeholder Worker entry point that returns `204`, test
+and validation harnesses, and design documents. There are no Reddit calls, D1
+migrations, scheduled handlers, Workflow bindings, parsers, or delivery calls
+on this baseline.
 
-## Intended runtime slices
+## Runtime slices
 
-Code should grow into explicit slices with one-way dependencies:
+Keep the implementation small and directional:
 
 ```text
-contracts -> configuration -> repositories -> services -> runtime entry points
+validated contracts -> D1 repository -> discovery/workflow services -> Worker entry points
 ```
 
-- **Contracts** parse Reddit, configuration, database, and site-ingest shapes.
-- **Configuration** turns validated bindings into explicit runtime policy.
-- **Repositories** own D1 queries and transaction boundaries.
-- **Services** implement discovery, diffing, scheduling, retention, and outbox
-  delivery without depending on Worker request/event objects.
-- **Runtime entry points** adapt scheduled and HTTP events and wire providers.
+- **Validated contracts** parse Reddit responses, configuration, parser
+  results, and site responses.
+- **D1 repository** stores discovered threads and source objects together with
+  parsing and delivery state.
+- **Discovery service** finds and evaluates new candidate posts.
+- **Workflow service** revisits one selected thread at the fixed polling
+  schedule and evaluates new replies.
+- **Delivery service** maps a parsed source object to the site's programmatic
+  crowd-report request and records acknowledgement.
+- **Worker entry points** adapt scheduled events and Cloudflare Workflows.
 
-Cross-cutting capabilities such as time, hashing, logging, Reddit transport,
-and site transport should enter services through explicit interfaces. Domain
-logic must not import Wrangler or construct production clients directly.
+Reddit transport, parsing, time, and site transport should be injected so tests
+remain deterministic. Add abstraction only where one of those boundaries needs
+it; do not pre-build a generic event-processing framework.
 
-When multiple slices exist, add a structural test or import-boundary lint before
-relying on this dependency direction as an architectural guarantee.
+## Durable invariants
 
-## Durable state invariants
+- A discovered source object has a stable identity and content version.
+- The same content version is not parsed repeatedly.
+- A relevant thread starts at most one active Workflow.
+- A parsed crowd report has one stable external report ID across retries.
+- The source object is durably pending before delivery is attempted.
+- Site acknowledgement is recorded only after an accepted or idempotent-success
+  response.
+- Raw source bodies and complete delivery payloads never enter logs or checked-in
+  fixtures.
 
-- A source-object change and its outbox event are one D1 transaction.
-- Event IDs and content versions are deterministic.
-- Delivery is at-least-once, so the consumer contract must be idempotent.
-- Version ordering prevents delayed events from reversing deletion or edits.
-- Work claiming is safe under overlapping scheduled invocations.
-- Raw content expiry does not remove the minimal tombstone required to prevent
-  replay or resurrection.
+D1 uniqueness constraints and short transactions should enforce these rules.
+Do not add claims, lifecycle events, support aggregation, generalized leases,
+or a separate outbox unless measured failures show the simpler storage cannot
+meet them.
 
 ## Change protocol
 
-Architecture changes require an execution plan that records the affected
-boundary, alternatives, migration/rollback strategy, and new mechanical
-enforcement. Update this file when the implemented module graph changes.
+Architecture changes require an execution plan recording the boundary,
+alternatives, rollback strategy, and validation. Update this document when the
+implemented module graph changes.

@@ -56,13 +56,15 @@ Co-authored-by: Codex <codex@openai.com>
 
 ## Invariants
 
-- This service discovers and versions Reddit source objects; it does not decide
-  whether a disruption is confirmed.
-- D1 state changes and matching outbox events must commit atomically.
-- Source and event identities are stable and retries are idempotent.
-- A stale upsert cannot resurrect a newer deletion.
+- This service turns useful Reddit posts and replies into structured crowd
+  reports; it does not decide whether a disruption is confirmed.
+- Reddit-specific source objects and workflow state remain in this repository.
+- A relevant thread starts at most one active Cloudflare Workflow.
+- Source versions and external report IDs are stable, and delivery retries are
+  idempotent.
+- A source object is stored durably before delivery is attempted.
 - Reddit API backoff and rate-limit headers override local polling schedules.
-- Raw content retention is bounded; deletion propagation is first-class.
+- Raw content retention is bounded and removed content is not republished.
 - Secrets and direct author identifiers never enter logs or committed fixtures.
 
 When repeated review feedback reveals a missing rule, update the relevant doc.

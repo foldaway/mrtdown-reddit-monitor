@@ -2,34 +2,45 @@
 
 Status: Target guarantees; not yet implemented
 
-Last verified: 2026-07-17
+Last verified: 2026-07-18
 
 ## Guarantees
 
-- Discovery and watch polling may repeat without duplicating source events.
-- Source updates and outbox insertion are atomic.
-- Delivery retries are bounded by exponential backoff and honor upstream hints.
-- Per-event acknowledgement lets one invalid event avoid replaying an entire
-  otherwise-successful batch forever.
-- Overlapping Worker invocations do not double-claim the same due work.
-- Deletions and removals are propagated and cannot be reversed by stale events.
+- Repeated discovery does not create duplicate source objects, reports, or
+  Workflows.
+- Selected posts and replies are stored before delivery is attempted.
+- Stable external report IDs make site delivery idempotent.
+- A failed delivery remains visibly pending and can be retried by the next
+  scheduled or Workflow invocation.
+- Workflow steps may repeat without resubmitting acknowledged reports.
+- Reddit backoff and `Retry-After` take precedence over the nominal schedule.
+
+Use D1 uniqueness constraints and short transactions first. Do not introduce a
+general lease manager, event stream, or transactional outbox unless overlapping
+invocations cause a measured correctness problem that simpler constraints
+cannot solve.
 
 ## Failure handling
 
-Reddit authentication failure, rate-limit exhaustion, malformed upstream data,
-D1 contention, and site-ingest failures must be distinguishable in structured
-logs without recording raw content or secrets. The scheduler should make the
-next attempt explicit in durable state rather than depend on in-memory timers.
+Distinguish Reddit authentication, throttling, malformed upstream data, parser
+failure, D1 failure, site authentication, site validation, and temporary site
+failure in structured logs. Never include source bodies, credentials, or full
+delivery payloads.
+
+Malformed reports and conflicting external IDs are terminal until inspected.
+Network failures, throttling, and server errors remain pending for bounded
+retry. A Workflow should record its current step so Cloudflare retry does not
+lose or duplicate work.
 
 ## Required signals
 
-Track discovery freshness, due/overdue watches, poll outcomes, Reddit rate-limit
-state, source lifecycle event counts, outbox depth and age, delivery attempts,
-terminal errors, purge counts, and oldest retained-content age.
+Track discovery freshness and candidate counts, active Workflow counts, poll
+outcomes, parsed relevant posts and replies, pending delivery count and age,
+site response categories, and Reddit rate-limit state.
 
 ## Validation milestones
 
-Before shadow traffic, add deterministic clock/transport fakes and D1-backed
-tests for transaction rollback, retry, concurrent claiming, version ordering,
-and retention. Before public use, define alert thresholds and exercise recovery
-from expired credentials, a growing outbox, and a failed migration.
+Before shadow traffic, add deterministic transport/parser fakes and D1-backed
+tests for repeated discovery, one-Workflow-per-thread behavior, source-version
+deduplication, and delivery retry. Before cutover, exercise credential failure,
+rate limiting, a failed Workflow step, and a temporary site outage.
