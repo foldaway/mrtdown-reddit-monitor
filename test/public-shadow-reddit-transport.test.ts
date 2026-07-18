@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  PublicShadowRedditDiscoveryTransport,
   PublicShadowRedditTransport,
   RedditTransportError,
 } from '../src/services/public-shadow-reddit-transport.js';
-import publicConversationFixture from './fixtures/reddit-public-conversation.json' with {
-  type: 'json',
-};
+import { syntheticRedditConversationFeed } from './fixtures/reddit-conversation-feed.js';
+import { syntheticRedditSearchFeed } from './fixtures/reddit-search-feed.js';
 
 const NOW = new Date('2026-07-18T01:00:00Z');
 const USER_AGENT = 'mrtdown-reddit-monitor/1.0 (+mailto:ops@example.invalid)';
@@ -19,10 +19,10 @@ describe('public-shadow Reddit transport', () => {
         const request = new Request(incoming, init);
         capturedRequest.url = request.url;
         capturedRequest.headers = request.headers;
-        return new Response(JSON.stringify(publicConversationFixture), {
+        return new Response(syntheticRedditConversationFeed, {
           status: 200,
           headers: {
-            'content-type': 'application/json; charset=utf-8',
+            'content-type': 'application/atom+xml; charset=utf-8',
             etag: '"synthetic-etag"',
             'last-modified': 'Fri, 18 Jul 2026 00:59:00 GMT',
             'x-ratelimit-remaining': '99.0',
@@ -40,7 +40,10 @@ describe('public-shadow Reddit transport', () => {
     });
 
     expect(capturedRequest.url).toBe(
-      'https://www.reddit.com/comments/synthetic1.json?raw_json=1&limit=100&depth=10',
+      'https://www.reddit.com/comments/synthetic1/.rss?sort=new&limit=500',
+    );
+    expect(capturedRequest.headers.get('accept')).toContain(
+      'application/atom+xml',
     );
     expect(capturedRequest.headers.get('user-agent')).toBe(USER_AGENT);
     expect(capturedRequest.headers.get('if-none-match')).toBe(
@@ -119,11 +122,11 @@ describe('public-shadow Reddit transport', () => {
   it('bounds response bodies while preserving safe retry metadata', async () => {
     const transport = new PublicShadowRedditTransport({
       fetch: async () =>
-        new Response('{}', {
+        new Response('<feed />', {
           status: 200,
           headers: {
             'content-length': '101',
-            'content-type': 'application/json',
+            'content-type': 'application/xml',
             'retry-after': '15',
           },
         }),
@@ -161,13 +164,13 @@ describe('public-shadow Reddit transport', () => {
     ).rejects.toThrowError('Invalid current time');
   });
 
-  it('normalizes malformed JSON without exposing its body', async () => {
-    const secretBody = '{"secret":"synthetic-sensitive-value"';
+  it('normalizes malformed XML without exposing its body', async () => {
+    const secretBody = '<feed><secret>synthetic-sensitive-value</feed>';
     const transport = new PublicShadowRedditTransport({
       fetch: async () =>
         new Response(secretBody, {
           status: 200,
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/xml' },
         }),
       now: () => NOW,
       userAgent: USER_AGENT,
@@ -181,5 +184,66 @@ describe('public-shadow Reddit transport', () => {
     }
     expect(caught).toMatchObject({ category: 'malformed_response' });
     expect(String(caught)).not.toContain(secretBody);
+  });
+});
+
+describe('public-shadow Reddit discovery transport', () => {
+  it('fetches one bounded subreddit search feed without following redirects', async () => {
+    let capturedRequest: Request | undefined;
+    const transport = new PublicShadowRedditDiscoveryTransport({
+      fetch: async (incoming, init) => {
+        capturedRequest = new Request(incoming, init);
+        return new Response(syntheticRedditSearchFeed, {
+          status: 200,
+          headers: { 'content-type': 'application/atom+xml; charset=UTF-8' },
+        });
+      },
+      now: () => NOW,
+      userAgent: USER_AGENT,
+    });
+
+    const result = await transport.fetchCandidates('singapore', 'mrt OR train');
+
+    expect(capturedRequest?.url).toBe(
+      'https://www.reddit.com/r/singapore/search.rss?q=mrt+OR+train&restrict_sr=on&sort=new',
+    );
+    expect(capturedRequest?.redirect).toBe('manual');
+    expect(capturedRequest?.headers.get('accept')).toContain(
+      'application/atom+xml',
+    );
+    expect(result).toMatchObject({
+      feed: {
+        candidates: [
+          { threadExternalId: 't3_synthetic1' },
+          { threadExternalId: 't3_synthetic2' },
+        ],
+      },
+      metadata: { status: 200 },
+    });
+  });
+
+  it('normalizes malformed feeds and rejects unsafe discovery input', async () => {
+    const secretFeed = '<feed><secret>synthetic-sensitive-value</feed>';
+    const transport = new PublicShadowRedditDiscoveryTransport({
+      fetch: async () =>
+        new Response(secretFeed, {
+          status: 200,
+          headers: { 'content-type': 'application/xml' },
+        }),
+      now: () => NOW,
+      userAgent: USER_AGENT,
+    });
+
+    let caught: unknown;
+    try {
+      await transport.fetchCandidates('singapore', 'mrt OR train');
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ category: 'malformed_response' });
+    expect(String(caught)).not.toContain(secretFeed);
+    await expect(
+      transport.fetchCandidates('../singapore', 'mrt OR train'),
+    ).rejects.toThrowError('Invalid subreddit');
   });
 });
