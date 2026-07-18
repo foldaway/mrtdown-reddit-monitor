@@ -40,9 +40,9 @@ candidates per day and roughly one to three live operational threads per month.
 Use D1 and Cloudflare Workflows directly. Queues, general lease machinery,
 claims, source-event streams, and a separate delivery outbox are out of scope.
 
-OAuth is the intended production Reddit transport. Public RSS plus bounded
-thread JSON may be used only as explicit shadow transport while approval is
-pending and only after a deployed Cloudflare canary succeeds.
+OAuth is the intended production Reddit transport. Bounded public RSS search
+and selected-post feeds may be used only as explicit shadow transport while
+approval is pending and only after a deployed Cloudflare canary succeeds.
 
 ## Plan
 
@@ -87,6 +87,18 @@ pending and only after a deployed Cloudflare canary succeeds.
   conditional validators, response byte limits, safe response metadata, and
   explicit authentication, block, rate-limit, content-type, and shape errors.
   The transport remains unwired until discovery and Workflow services land.
+- 2026-07-18: Added bounded public-shadow search discovery while preserving the
+  legacy crawler's subreddit search shape. Atom feeds contribute only validated
+  thread identities and permalinks; new identities are resolved through public
+  conversation JSON, checked against the candidate, and stored in D1. Repeated
+  discovery skips the conversation fetch for an existing thread.
+- 2026-07-19: Replaced unauthenticated conversation JSON in public-shadow mode
+  with the selected post's bounded RSS feed after Reddit announced the JSON
+  path's deprecation. Conversation normalization extracts the root and flat
+  replies without author identity or guessed nesting. Snapshot persistence now
+  stores all observed versions, replays idempotently, preserves replies absent
+  from later feeds, and creates a new pending version when the root post is
+  edited with rectification information.
 
 ## Decisions
 
@@ -107,7 +119,9 @@ pending and only after a deployed Cloudflare canary succeeds.
 - Site acknowledgement parsing requires only the planned report ID and
   moderation status so additive response metadata remains compatible.
 - Source content versions and external report IDs use domain-separated SHA-256
-  identities so retries and transport changes do not alter stored identity.
+  identities over normalized source meaning. Parent relationships, permalinks,
+  and timestamps are excluded so RSS/OAuth transport changes do not alter
+  stored identity.
 - Source title/body text is cleared after evaluation. A removed or deleted
   version purges retained text for every stored version of that object.
 - Late, previously unseen active versions are stored as superseded rather than
@@ -115,6 +129,18 @@ pending and only after a deployed Cloudflare canary succeeds.
 - Public-shadow conversation access has one allowed origin and no automatic
   fallback. It returns only bounded cache/rate-limit metadata and normalized
   source objects; response bodies never enter transport errors.
+- Public-shadow Atom parsing uses a pinned XML parser because the Workers
+  runtime does not provide a general XML DOM. The boundary rejects document
+  types, limits feed bytes, nesting, entity expansion, and entries. Search feeds
+  contribute candidate identity only; selected-post feeds contribute only text
+  inside Reddit's rendered `div.md` content.
+- Public-shadow conversation RSS is fetched without `depth` or `context`.
+  Replies are stored flat with no parent ID, and context-dependent replies may
+  be rejected later by the semantic parser rather than reconstructed through
+  extra Reddit requests.
+- Every conversation snapshot includes the root post. Root content edits are
+  versioned and re-evaluated because authors may add a rectification; an object
+  absent from a later feed is not considered removed.
 
 ## Validation
 
@@ -136,11 +162,19 @@ Implementation validation:
 - 2026-07-18: `npm run check` passed with 6 test files and 25 tests after the
   bounded public-shadow transport slice, including formatting, lint, types,
   tests, and documentation validation.
+- 2026-07-18: `npm run check` passed with 8 test files and 32 tests after the
+  public-shadow search discovery slice, including Atom limits and identity
+  validation, safe transport failures, discovery replay, and D1 persistence.
+- 2026-07-19: `npm run check` passed with 10 test files and 38 tests after the
+  public-shadow conversation RSS slice, including flat source normalization,
+  bounded transport behavior, parentless reply storage, snapshot replay and
+  absence semantics, transport-neutral identity, and root-post rectification
+  versions.
 
 ## Follow-ups
 
-- Implement bounded RSS shadow discovery and feed its new thread identities
-  through the public conversation transport before storing source versions.
+- Wire the discovery service to a five-minute scheduled handler with durable
+  Reddit backoff state before enabling shadow traffic.
 - Remove Reddit from `mrtdown-data-crawler` in a separate change after the
   rollback window.
 - Consider generated contract artifacts, Queues, longer watches, or author

@@ -24,13 +24,17 @@ authenticated crowd report at a time.
 
 The repository has a placeholder Worker entry point that returns `204`, test
 and validation harnesses, validated contracts, the first D1 repository slice,
-and a bounded public-shadow transport for selected conversation JSON. Runtime
-configuration, public Reddit conversation JSON, semantic-parser decisions,
-site requests/responses, and stored D1 rows are normalized at explicit
-boundaries. The migration enforces version evaluation, delivery, and
-one-Workflow-identity invariants. The transport is not wired to the Worker;
-there are no discovery calls, scheduled handlers, Workflow bindings, semantic
-parser implementation, or delivery calls yet.
+and bounded public-shadow RSS transports for search and selected conversations.
+A discovery service accepts only validated search-feed identities, skips known
+threads, resolves new identities through the selected post's RSS feed, verifies
+the normalized root, and stores its source version in D1. A conversation
+snapshot service stores the root and flat replies without guessing parent
+relationships or treating feed absence as removal. Runtime configuration,
+Reddit responses, semantic-parser decisions, site requests/responses, and
+stored D1 rows are normalized at explicit boundaries. The migration enforces
+version evaluation, delivery, and one-Workflow-identity invariants. Discovery
+and snapshots are not wired to the Worker; there are no scheduled handlers,
+Workflow bindings, semantic parser implementation, or delivery calls yet.
 
 ## Runtime slices
 
@@ -59,6 +63,8 @@ it; do not pre-build a generic event-processing framework.
 ## Durable invariants
 
 - A discovered source object has a stable identity and content version.
+- Content versions depend on normalized source meaning, not transport-only
+  timestamps, permalinks, or unavailable RSS parent relationships.
 - The same content version is not parsed repeatedly.
 - A relevant thread starts at most one active Workflow.
 - A parsed crowd report has one stable external report ID across retries.
@@ -67,6 +73,8 @@ it; do not pre-build a generic event-processing framework.
   response.
 - Raw source bodies and complete delivery payloads never enter logs or checked-in
   fixtures.
+- An edited root post is versioned and re-evaluated like a changed reply;
+  absence from an RSS snapshot is not evidence of deletion.
 
 D1 uniqueness constraints and short transactions should enforce these rules.
 Do not add claims, lifecycle events, support aggregation, generalized leases,

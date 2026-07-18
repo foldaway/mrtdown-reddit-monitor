@@ -3,9 +3,11 @@
 Reddit post and reply monitoring for MRTDown crowd reports.
 
 > The repository currently contains a Cloudflare Worker scaffold, validated
-> boundary contracts, the initial D1 repository, and a bounded public-shadow
-> conversation transport. Reddit discovery, Cloudflare Workflows, semantic
-> parsing, and delivery calls are not yet implemented.
+> boundary contracts, the initial D1 repository, and bounded public-shadow
+> RSS search/conversation transports with D1-backed discovery and conversation
+> snapshot services. Scheduled
+> runtime wiring, Cloudflare Workflows, semantic parsing, and delivery calls are
+> not yet implemented.
 
 ## Repository Guide
 
@@ -109,11 +111,13 @@ Begin with these approximate checks after the thread is selected:
 - `+6h`
 - `+24h`
 
-At each step, fetch the current conversation, compare it with D1, and inspect
-only new or materially changed replies. Store replies before attempting
-delivery. A relevant reply is parsed and sent as its own crowd report; an
-irrelevant reply is marked evaluated and is not reconsidered unless its source
-content changes.
+At each step, fetch the current flat post RSS feed, compare it with D1, and
+inspect only new or materially changed source objects. Store each observed
+version before attempting delivery. A relevant reply is parsed and sent as its
+own crowd report; an irrelevant reply is marked evaluated and is not
+reconsidered unless its source content changes. Re-evaluate an edited root post
+too, because the author may add a rectification such as restored service. Do
+not infer deletion from an object being absent from a later feed.
 
 The Workflow completes after the final check. Add a longer watch or deletion
 audit only if real operation demonstrates a need.
@@ -185,8 +189,10 @@ actually observed.
 
 OAuth with a registered client and descriptive user agent is the intended
 production mode. While the application is pending, a temporary shadow mode may
-continue using the proven public RSS discovery path and public thread `.json`
-only after a canary succeeds from the deployed Cloudflare Worker.
+use the proven public RSS discovery path and the selected post's bounded RSS
+feed only after a canary succeeds from the deployed Cloudflare Worker. The post
+feed is normalized as one root plus flat replies; shadow mode does not infer or
+reconstruct comment nesting.
 
 There must be no automatic fallback from OAuth to public access. Shadow mode
 must remain conservative, honor `Retry-After` and cache validators, and stop on

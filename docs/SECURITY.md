@@ -17,6 +17,8 @@ programmatic-report request.
 - Never commit `.dev.vars`, tokens, production IDs, or real Reddit content.
 - Never send usernames, profiles, avatars, flair, or conversation structure to
   the site.
+- Ignore RSS author and generated-comment-title fields, and do not reconstruct
+  missing parent relationships from comment text or follow-up requests.
 - Do not persist usernames unless a demonstrated deduplication requirement
   justifies a pseudonymous, short-lived replacement.
 - Bound stored title/body retention and purge removed content.

@@ -1,6 +1,6 @@
 # Reliability
 
-Status: Storage guarantees implemented; runtime services pending
+Status: Discovery storage path implemented; runtime handlers pending
 
 Last verified: 2026-07-18
 
@@ -13,6 +13,10 @@ Last verified: 2026-07-18
 - A failed delivery remains visibly pending and can be retried by the next
   scheduled or Workflow invocation.
 - Workflow steps may repeat without resubmitting acknowledged reports.
+- An edited root post creates a new pending source version, so author-added
+  rectifications can be evaluated as resolution reports.
+- A reply missing from a later RSS snapshot remains stored; only an explicit
+  removed or deleted body triggers content purging.
 - Reddit backoff and `Retry-After` take precedence over the nominal schedule.
 
 Use D1 uniqueness constraints and short transactions first. Do not introduce a
@@ -40,8 +44,10 @@ site response categories, and Reddit rate-limit state.
 
 ## Validation milestones
 
-D1-backed tests now cover repeated storage, one-Workflow-identity behavior,
-source-version deduplication, and durable pending delivery. Before shadow
-traffic, add deterministic transport/parser fakes and service-level retry
-tests. Before cutover, exercise credential failure, rate limiting, a failed
-Workflow step, and a temporary site outage.
+D1-backed tests now cover discovery replay, candidate/conversation identity
+verification, flat conversation snapshot replay, edited root posts, RSS absence
+semantics, repeated storage, one-Workflow-identity behavior, source-version
+deduplication, and durable pending delivery. Before shadow traffic, add the
+semantic parser, scheduled runtime wiring, and service-level retry tests.
+Before cutover, exercise credential failure, rate limiting, a failed Workflow
+step, and a temporary site outage.
