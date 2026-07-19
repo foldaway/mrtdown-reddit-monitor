@@ -190,21 +190,21 @@ describe('RedditRepository', () => {
       externalReportId,
     );
 
-    await expect(repository.listPendingDeliveries()).resolves.toEqual([
+    await expect(
+      repository.listReadyDeliveries('2026-07-18T00:02:00Z'),
+    ).resolves.toEqual([
       {
-        externalReportId,
-        sourceUrl: source.sourceUrl,
-        report: validReport,
+        key,
+        request: {
+          externalReportId,
+          sourceUrl: source.sourceUrl,
+          report: validReport,
+        },
       },
     ]);
     const response = {
-      success: true,
-      data: {
-        id: 'site-report-synthetic-1',
-        status: 'accepted',
-        duplicateOfId: null,
-        idempotentReplay: false,
-      },
+      reportId: 'site-report-synthetic-1',
+      moderationStatus: 'accepted' as const,
     };
     const acknowledged = await repository.recordDeliveryAcknowledgement(
       key,
@@ -214,13 +214,16 @@ describe('RedditRepository', () => {
 
     expect(acknowledged).toMatchObject({
       deliveryStatus: 'acknowledged',
+      deliveryAttemptCount: 1,
       acknowledgement: {
         reportId: 'site-report-synthetic-1',
         moderationStatus: 'accepted',
         acknowledgedAt: '2026-07-18T00:03:00.000Z',
       },
     });
-    await expect(repository.listPendingDeliveries()).resolves.toEqual([]);
+    await expect(
+      repository.listReadyDeliveries('2026-07-18T00:04:00Z'),
+    ).resolves.toEqual([]);
     await expect(
       repository.recordDeliveryAcknowledgement(
         key,
@@ -233,7 +236,7 @@ describe('RedditRepository', () => {
         key,
         {
           ...response,
-          data: { ...response.data, id: 'conflicting-site-report' },
+          reportId: 'conflicting-site-report',
         },
         '2026-07-18T00:04:00Z',
       ),

@@ -104,10 +104,14 @@ describe('pending source evaluation', () => {
         now: () => NOW,
       }),
     ).resolves.toMatchObject({ pendingCount: 1, reportCount: 1 });
-    await expect(repository.listPendingDeliveries()).resolves.toEqual([
+    await expect(
+      repository.listReadyDeliveries(NOW.toISOString()),
+    ).resolves.toEqual([
       expect.objectContaining({
-        externalReportId: expect.stringMatching(/^reddit\.[a-f0-9]{64}$/),
-        report,
+        request: expect.objectContaining({
+          externalReportId: expect.stringMatching(/^reddit\.[a-f0-9]{64}$/),
+          report,
+        }),
       }),
     ]);
   });

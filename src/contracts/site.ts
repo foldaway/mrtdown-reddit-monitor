@@ -32,6 +32,18 @@ export interface SiteAcceptedResponse {
   moderationStatus: (typeof MODERATION_STATUSES)[number];
 }
 
+export type SiteDeliveryErrorCategory =
+  | 'authentication'
+  | 'idempotency_conflict'
+  | 'invalid_content_type'
+  | 'invalid_request'
+  | 'invalid_response'
+  | 'network'
+  | 'rate_limited'
+  | 'response_too_large'
+  | 'server'
+  | 'unexpected_status';
+
 export function parseCrowdReportDeliveryRequest(
   input: unknown,
 ): CrowdReportDeliveryRequest {

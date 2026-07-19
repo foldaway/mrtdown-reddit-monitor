@@ -7,6 +7,7 @@ import {
   parseCrowdReportDeliveryRequest,
   parseSiteAcceptedResponse,
   type CrowdReportDeliveryRequest,
+  type SiteDeliveryErrorCategory,
   type SiteAcceptedResponse,
 } from '../contracts/site.js';
 
@@ -18,6 +19,18 @@ const REDDIT_ORIGINS = new Set([
   'https://reddit.com',
   'https://www.reddit.com',
 ]);
+const SITE_DELIVERY_ERROR_CATEGORIES = [
+  'authentication',
+  'idempotency_conflict',
+  'invalid_content_type',
+  'invalid_request',
+  'invalid_response',
+  'network',
+  'rate_limited',
+  'response_too_large',
+  'server',
+  'unexpected_status',
+] as const satisfies readonly SiteDeliveryErrorCategory[];
 
 type EvaluationStatus = 'pending' | 'superseded' | 'irrelevant' | 'report';
 type DeliveryStatus = 'none' | 'pending' | 'acknowledged';
@@ -39,7 +52,19 @@ export interface StoredSourceVersion {
   report?: CrowdReport;
   externalReportId?: string;
   deliveryStatus: DeliveryStatus;
+  deliveryAttemptCount: number;
+  deliveryFailure?: {
+    category: SiteDeliveryErrorCategory;
+    attemptedAt: string;
+    retryAt?: string;
+    terminal: boolean;
+  };
   acknowledgement?: SiteAcceptedResponse & { acknowledgedAt: string };
+}
+
+export interface PendingDeliveryRecord {
+  key: SourceVersionKey;
+  request: CrowdReportDeliveryRequest;
 }
 
 export interface ThreadRecord {
@@ -347,11 +372,17 @@ export class RedditRepository {
 
   async recordDeliveryAcknowledgement(
     key: SourceVersionKey,
-    responseInput: unknown,
+    responseInput: SiteAcceptedResponse,
     acknowledgedAt: string,
   ): Promise<StoredSourceVersion> {
     validateKey(key);
-    const response = parseSiteAcceptedResponse(responseInput);
+    const response = parseSiteAcceptedResponse({
+      success: true,
+      data: {
+        id: responseInput.reportId,
+        status: responseInput.moderationStatus,
+      },
+    });
     const normalizedAcknowledgedAt = normalizeTimestamp(
       acknowledgedAt,
       'acknowledged_at',
@@ -375,13 +406,17 @@ export class RedditRepository {
         .prepare(
           `UPDATE reddit_source_objects
            SET delivery_status = 'acknowledged', site_report_id = ?,
-               moderation_status = ?, acknowledged_at = ?
+               moderation_status = ?, acknowledged_at = ?,
+               delivery_attempt_count = delivery_attempt_count + 1,
+               delivery_last_attempted_at = ?, delivery_error_category = NULL,
+               delivery_retry_at = NULL, delivery_terminal = 0
            WHERE source_external_id = ? AND content_version = ?
              AND delivery_status = 'pending'`,
         )
         .bind(
           response.reportId,
           response.moderationStatus,
+          normalizedAcknowledgedAt,
           normalizedAcknowledgedAt,
           key.sourceExternalId,
           key.contentVersion,
@@ -400,9 +435,66 @@ export class RedditRepository {
     return stored;
   }
 
-  async listPendingDeliveries(
+  async recordDeliveryFailure(
+    key: SourceVersionKey,
+    failure: {
+      category: SiteDeliveryErrorCategory;
+      retryAt: string | null;
+      terminal: boolean;
+    },
+    attemptedAt: string,
+  ): Promise<StoredSourceVersion> {
+    validateKey(key);
+    if (!SITE_DELIVERY_ERROR_CATEGORIES.includes(failure.category)) {
+      throw new StorageInvariantError('delivery_error_category');
+    }
+    if (typeof failure.terminal !== 'boolean') {
+      throw new StorageInvariantError('delivery_terminal');
+    }
+    if (failure.terminal && failure.retryAt !== null) {
+      throw new StorageInvariantError('terminal_delivery_retry');
+    }
+    const normalizedAttemptedAt = normalizeTimestamp(
+      attemptedAt,
+      'delivery_attempted_at',
+    );
+    const normalizedRetryAt =
+      failure.retryAt === null
+        ? null
+        : normalizeTimestamp(failure.retryAt, 'delivery_retry_at');
+    const existing = await this.requireSourceVersion(key);
+    if (existing.deliveryStatus === 'acknowledged') return existing;
+    if (existing.deliveryStatus !== 'pending') {
+      throw new StorageInvariantError('delivery_not_pending');
+    }
+
+    await safeRun(
+      this.database
+        .prepare(
+          `UPDATE reddit_source_objects
+           SET delivery_attempt_count = delivery_attempt_count + 1,
+               delivery_last_attempted_at = ?, delivery_error_category = ?,
+               delivery_retry_at = ?, delivery_terminal = ?
+           WHERE source_external_id = ? AND content_version = ?
+             AND delivery_status = 'pending'`,
+        )
+        .bind(
+          normalizedAttemptedAt,
+          failure.category,
+          normalizedRetryAt,
+          failure.terminal ? 1 : 0,
+          key.sourceExternalId,
+          key.contentVersion,
+        ),
+    );
+    return this.requireSourceVersion(key);
+  }
+
+  async listReadyDeliveries(
+    readyAt: string,
     limit = 100,
-  ): Promise<CrowdReportDeliveryRequest[]> {
+  ): Promise<PendingDeliveryRecord[]> {
+    const normalizedReadyAt = normalizeTimestamp(readyAt, 'delivery_ready_at');
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new StorageInvariantError('pending_delivery_limit');
     }
@@ -410,13 +502,15 @@ export class RedditRepository {
     try {
       const result = await this.database
         .prepare(
-          `SELECT external_report_id, source_url, parsed_report_json
+          `SELECT source_external_id, content_version, external_report_id,
+                  source_url, parsed_report_json
            FROM reddit_source_objects
-           WHERE delivery_status = 'pending'
+           WHERE delivery_status = 'pending' AND delivery_terminal = 0
+             AND (delivery_retry_at IS NULL OR delivery_retry_at <= ?)
            ORDER BY first_seen_at, source_external_id, content_version
            LIMIT ?`,
         )
-        .bind(limit)
+        .bind(normalizedReadyAt, limit)
         .all<Record<string, unknown>>();
       rows = result.results;
     } catch {
@@ -554,6 +648,20 @@ function parseSourceVersionRow(
     const siteReportId = rowNullableString(row, 'site_report_id');
     const moderationStatus = rowNullableString(row, 'moderation_status');
     const acknowledgedAtValue = rowNullableString(row, 'acknowledged_at');
+    const deliveryAttemptCount = rowNonNegativeInteger(
+      row,
+      'delivery_attempt_count',
+    );
+    const deliveryLastAttemptedAtValue = rowNullableString(
+      row,
+      'delivery_last_attempted_at',
+    );
+    const deliveryErrorCategoryValue = rowNullableString(
+      row,
+      'delivery_error_category',
+    );
+    const deliveryRetryAtValue = rowNullableString(row, 'delivery_retry_at');
+    const deliveryTerminal = rowBoolean(row, 'delivery_terminal');
 
     let report: CrowdReport | undefined;
     if (reportJson !== null) {
@@ -603,6 +711,52 @@ function parseSourceVersionRow(
     ) {
       corruptRow();
     }
+    const deliveryLastAttemptedAt =
+      deliveryLastAttemptedAtValue === null
+        ? undefined
+        : normalizeTimestamp(
+            deliveryLastAttemptedAtValue,
+            'delivery_last_attempted_at',
+          );
+    const deliveryRetryAt =
+      deliveryRetryAtValue === null
+        ? undefined
+        : normalizeTimestamp(deliveryRetryAtValue, 'delivery_retry_at');
+    let deliveryFailure: StoredSourceVersion['deliveryFailure'];
+    if (deliveryErrorCategoryValue !== null) {
+      if (
+        !SITE_DELIVERY_ERROR_CATEGORIES.includes(
+          deliveryErrorCategoryValue as SiteDeliveryErrorCategory,
+        ) ||
+        deliveryLastAttemptedAt === undefined
+      ) {
+        corruptRow();
+      }
+      deliveryFailure = {
+        category: deliveryErrorCategoryValue as SiteDeliveryErrorCategory,
+        attemptedAt: deliveryLastAttemptedAt,
+        ...(deliveryRetryAt === undefined ? {} : { retryAt: deliveryRetryAt }),
+        terminal: deliveryTerminal,
+      };
+    }
+    if (
+      (deliveryAttemptCount === 0 &&
+        (deliveryLastAttemptedAt !== undefined ||
+          deliveryFailure !== undefined ||
+          deliveryRetryAt !== undefined ||
+          deliveryTerminal)) ||
+      (deliveryStatus === 'none' && deliveryAttemptCount !== 0) ||
+      (deliveryStatus === 'pending' &&
+        deliveryAttemptCount > 0 &&
+        deliveryFailure === undefined) ||
+      (deliveryStatus === 'acknowledged' &&
+        (deliveryFailure !== undefined ||
+          deliveryRetryAt !== undefined ||
+          deliveryTerminal)) ||
+      (deliveryTerminal && deliveryRetryAt !== undefined)
+    ) {
+      corruptRow();
+    }
 
     return {
       source: {
@@ -631,6 +785,8 @@ function parseSourceVersionRow(
       ...(report === undefined ? {} : { report }),
       ...(externalReportId === null ? {} : { externalReportId }),
       deliveryStatus,
+      deliveryAttemptCount,
+      ...(deliveryFailure === undefined ? {} : { deliveryFailure }),
       ...(acknowledgement === undefined ? {} : { acknowledgement }),
     };
   } catch (error) {
@@ -693,16 +849,23 @@ function parseThreadRow(row: Record<string, unknown>): ThreadRecord {
 
 function parsePendingDeliveryRow(
   row: Record<string, unknown>,
-): CrowdReportDeliveryRequest {
+): PendingDeliveryRecord {
   try {
+    const sourceExternalId = rowString(row, 'source_external_id');
+    const contentVersion = rowString(row, 'content_version');
+    validateFullname(sourceExternalId, 'source_external_id');
+    validateContentVersion(contentVersion);
     const externalReportId = rowString(row, 'external_report_id');
     const sourceUrl = rowNullableString(row, 'source_url');
     const reportJson = rowString(row, 'parsed_report_json');
-    return parseCrowdReportDeliveryRequest({
-      externalReportId,
-      ...(sourceUrl === null ? {} : { sourceUrl }),
-      report: JSON.parse(reportJson),
-    });
+    return {
+      key: { sourceExternalId, contentVersion },
+      request: parseCrowdReportDeliveryRequest({
+        externalReportId,
+        ...(sourceUrl === null ? {} : { sourceUrl }),
+        report: JSON.parse(reportJson),
+      }),
+    };
   } catch {
     throw new StorageInvariantError('corrupt_row');
   }
@@ -865,6 +1028,15 @@ function rowBoolean(row: Record<string, unknown>, key: string): boolean {
   const value = row[key];
   if (value !== 0 && value !== 1) corruptRow();
   return value === 1;
+}
+
+function rowNonNegativeInteger(
+  row: Record<string, unknown>,
+  key: string,
+): number {
+  const value = row[key];
+  if (!Number.isSafeInteger(value) || (value as number) < 0) corruptRow();
+  return value as number;
 }
 
 function rowEnum<const Values extends readonly string[]>(
