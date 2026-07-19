@@ -9,6 +9,8 @@ const validEnv = {
   REDDIT_SUBREDDITS: 'singapore,askSingapore',
   REDDIT_DISCOVERY_QUERY: 'synthetic rail condition',
   MRTDOWN_SITE_INGEST_URL: 'https://example.invalid/internal/api/crowd-reports',
+  MRTDOWN_SITE_REFERENCE_CATALOG_URL:
+    'https://example.invalid/internal/api/reference-catalog/v1',
   MRTDOWN_SITE_INGEST_TOKEN: 'synthetic-site-token',
 };
 
@@ -25,6 +27,8 @@ describe('runtime config boundary', () => {
       },
       site: {
         ingestUrl: 'https://example.invalid/internal/api/crowd-reports',
+        referenceCatalogUrl:
+          'https://example.invalid/internal/api/reference-catalog/v1',
         ingestToken: 'synthetic-site-token',
       },
     });
@@ -73,5 +77,31 @@ describe('runtime config boundary', () => {
     } catch (error) {
       expect(String(error)).not.toContain(secretUrl);
     }
+  });
+
+  it('requires the reference catalog to share the ingest origin', () => {
+    expect(() =>
+      parseRuntimeConfig({
+        ...validEnv,
+        MRTDOWN_SITE_REFERENCE_CATALOG_URL:
+          'https://other.invalid/internal/api/reference-catalog/v1',
+      }),
+    ).toThrowError(
+      new BoundaryValidationError(
+        'runtime_config',
+        'site_reference_catalog_url',
+      ),
+    );
+  });
+
+  it('requires the site producer minimum token length', () => {
+    expect(() =>
+      parseRuntimeConfig({
+        ...validEnv,
+        MRTDOWN_SITE_INGEST_TOKEN: 'too-short',
+      }),
+    ).toThrowError(
+      new BoundaryValidationError('runtime_config', 'site_ingest_token'),
+    );
   });
 });

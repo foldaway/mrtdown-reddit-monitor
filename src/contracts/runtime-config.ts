@@ -25,6 +25,7 @@ export interface RuntimeConfig {
   };
   site: {
     ingestUrl: string;
+    referenceCatalogUrl: string;
     ingestToken: string;
   };
 }
@@ -65,6 +66,17 @@ export function parseRuntimeConfig(input: unknown): RuntimeConfig {
   if (new URL(ingestUrl).protocol !== 'https:') {
     fail(BOUNDARY, 'site_ingest_url');
   }
+  const referenceCatalogUrl = parseHttpUrl(
+    env.MRTDOWN_SITE_REFERENCE_CATALOG_URL,
+    BOUNDARY,
+    'site_reference_catalog_url',
+  );
+  if (
+    new URL(referenceCatalogUrl).protocol !== 'https:' ||
+    new URL(referenceCatalogUrl).origin !== new URL(ingestUrl).origin
+  ) {
+    fail(BOUNDARY, 'site_reference_catalog_url');
+  }
 
   return {
     reddit,
@@ -78,14 +90,16 @@ export function parseRuntimeConfig(input: unknown): RuntimeConfig {
     },
     site: {
       ingestUrl,
-      ingestToken: parseString(
-        env.MRTDOWN_SITE_INGEST_TOKEN,
-        BOUNDARY,
-        'site_ingest_token',
-        { maximumLength: 4_096 },
-      ),
+      referenceCatalogUrl,
+      ingestToken: parseSiteToken(env.MRTDOWN_SITE_INGEST_TOKEN),
     },
   };
+}
+
+function parseSiteToken(input: unknown): string {
+  const token = parseSingleLineString(input, 'site_ingest_token', 4_096);
+  if (token.length < 16) fail(BOUNDARY, 'site_ingest_token');
+  return token;
 }
 
 function parseTransportMode(input: unknown): 'oauth' | 'public-shadow' {

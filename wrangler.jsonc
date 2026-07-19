@@ -11,7 +11,8 @@
     "REDDIT_USER_AGENT_CONTACT": "https://www.mrtdown.org",
     "REDDIT_SUBREDDITS": "singapore,askSingapore",
     "REDDIT_DISCOVERY_QUERY": "mrt OR train",
-    "MRTDOWN_SITE_INGEST_URL": "https://www.mrtdown.org/internal/api/crowd-reports"
+    "MRTDOWN_SITE_INGEST_URL": "https://www.mrtdown.org/internal/api/crowd-reports",
+    "MRTDOWN_SITE_REFERENCE_CATALOG_URL": "https://www.mrtdown.org/internal/api/reference-catalog/v1"
   },
   "secrets": {
     "required": ["MRTDOWN_SITE_INGEST_TOKEN"]

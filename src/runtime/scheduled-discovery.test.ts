@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SemanticParserError } from '../services/workers-ai-semantic-parser.js';
 import { runScheduledDiscovery } from './scheduled-discovery.js';
+import { syntheticReferenceCatalog } from '../../test/fixtures/reference-catalog.js';
 import { syntheticRedditConversationFeed } from '../../test/fixtures/reddit-conversation-feed.js';
 import { syntheticRedditSearchFeed } from '../../test/fixtures/reddit-search-feed.js';
 
@@ -40,6 +41,8 @@ function runtimeEnv(
     REDDIT_DISCOVERY_QUERY: 'synthetic rail condition',
     MRTDOWN_SITE_INGEST_URL:
       'https://example.invalid/internal/api/crowd-reports',
+    MRTDOWN_SITE_REFERENCE_CATALOG_URL:
+      'https://example.invalid/internal/api/reference-catalog/v1',
     MRTDOWN_SITE_INGEST_TOKEN: 'synthetic-site-token',
   };
 }
@@ -51,6 +54,7 @@ describe('scheduled Reddit discovery runtime', () => {
       testEnv.DB.prepare('DELETE FROM reddit_source_objects'),
       testEnv.DB.prepare('DELETE FROM reddit_threads'),
       testEnv.DB.prepare('DELETE FROM reddit_transport_state'),
+      testEnv.DB.prepare('DELETE FROM site_reference_catalog_cache'),
     ]);
   });
 
@@ -58,6 +62,23 @@ describe('scheduled Reddit discovery runtime', () => {
     const log = vi.fn();
     const fetch = vi.fn(async (input: RequestInfo | URL) => {
       const request = new Request(input);
+      if (request.url.includes('/reference-catalog/v1')) {
+        return referenceCatalogResponse();
+      }
+      if (request.url.includes('/crowd-reports')) {
+        return Response.json(
+          {
+            success: true,
+            data: {
+              id: 'site-report-synthetic-1',
+              status: 'accepted',
+              duplicateOfId: null,
+              idempotentReplay: false,
+            },
+          },
+          { status: 202 },
+        );
+      }
       if (request.url.includes('/search.rss')) {
         return new Response(singleCandidateSearchFeed, {
           status: 200,
@@ -80,6 +101,7 @@ describe('scheduled Reddit discovery runtime', () => {
         fetchedConversationCount: 1,
       },
       evaluation: { pendingCount: 1, reportCount: 1 },
+      delivery: { readyCount: 1, acknowledgedCount: 1 },
     });
     await expect(
       runScheduledDiscovery(runtimeEnv(), dependencies),
@@ -90,7 +112,7 @@ describe('scheduled Reddit discovery runtime', () => {
         fetchedConversationCount: 0,
       },
     });
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenCalledTimes(5);
     expect(log).toHaveBeenLastCalledWith(
       expect.objectContaining({
         event: 'reddit_discovery_completed',
@@ -102,7 +124,13 @@ describe('scheduled Reddit discovery runtime', () => {
     );
     expect(
       await testEnv.DB.prepare(
-        'SELECT COUNT(*) AS count FROM reddit_source_objects',
+        `SELECT COUNT(*) AS count FROM reddit_source_objects
+         WHERE delivery_status = 'acknowledged'`,
+      ).first('count'),
+    ).toBe(1);
+    expect(
+      await testEnv.DB.prepare(
+        'SELECT COUNT(*) AS count FROM site_reference_catalog_cache',
       ).first('count'),
     ).toBe(1);
   });
@@ -135,10 +163,73 @@ describe('scheduled Reddit discovery runtime', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('retries pending site delivery even when Reddit enters backoff', async () => {
+    let siteAttempt = 0;
+    let redditRateLimited = false;
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const request = new Request(input);
+      if (request.url.includes('/reference-catalog/v1')) {
+        return referenceCatalogResponse();
+      }
+      if (request.url.includes('/crowd-reports')) {
+        siteAttempt += 1;
+        if (siteAttempt === 1) return new Response(null, { status: 503 });
+        return Response.json(
+          {
+            success: true,
+            data: { id: 'site-report-retry', status: 'accepted' },
+          },
+          { status: 202 },
+        );
+      }
+      if (redditRateLimited) {
+        return new Response(null, {
+          status: 429,
+          headers: { 'retry-after': '60' },
+        });
+      }
+      return new Response(
+        request.url.includes('/search.rss')
+          ? singleCandidateSearchFeed
+          : syntheticRedditConversationFeed,
+        {
+          status: 200,
+          headers: { 'content-type': 'application/atom+xml' },
+        },
+      );
+    });
+    const dependencies = { fetch, now: () => NOW, log: vi.fn() };
+
+    await expect(
+      runScheduledDiscovery(runtimeEnv(), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      delivery: { readyCount: 1, retryableFailureCount: 1 },
+    });
+    redditRateLimited = true;
+    await expect(
+      runScheduledDiscovery(runtimeEnv(), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'transport_error',
+      category: 'rate_limited',
+      delivery: { readyCount: 1, acknowledgedCount: 1 },
+    });
+    expect(siteAttempt).toBe(2);
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM reddit_source_objects
+         WHERE delivery_status = 'acknowledged'`,
+      ).first('count'),
+    ).toBe(1);
+  });
+
   it('logs a safe parser category and leaves evaluation pending on invalid output', async () => {
     const log = vi.fn();
     const fetch = vi.fn(async (input: RequestInfo | URL) => {
       const request = new Request(input);
+      if (request.url.includes('/reference-catalog/v1')) {
+        return referenceCatalogResponse();
+      }
       return new Response(
         request.url.includes('/search.rss')
           ? singleCandidateSearchFeed
@@ -172,3 +263,10 @@ describe('scheduled Reddit discovery runtime', () => {
     ).toBe(1);
   });
 });
+
+function referenceCatalogResponse(): Response {
+  return Response.json(
+    { success: true, data: syntheticReferenceCatalog },
+    { headers: { 'cache-control': 'private, max-age=300' } },
+  );
+}
