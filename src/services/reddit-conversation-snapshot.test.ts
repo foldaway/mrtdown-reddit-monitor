@@ -2,14 +2,14 @@ import { applyD1Migrations, env } from 'cloudflare:test';
 import type { D1Migration } from '@cloudflare/vitest-pool-workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { parseRedditConversationAtom } from '../src/contracts/reddit-conversation-atom.js';
-import { computeContentVersion } from '../src/domain/source-identity.js';
-import { storeRedditConversationSnapshot } from '../src/services/reddit-conversation-snapshot.js';
-import { RedditRepository } from '../src/storage/reddit-repository.js';
+import { parseRedditConversationAtom } from '../contracts/reddit-conversation-atom.js';
+import { computeContentVersion } from '../domain/source-identity.js';
+import { RedditRepository } from '../storage/reddit-repository.js';
+import { storeRedditConversationSnapshot } from './reddit-conversation-snapshot.js';
 import {
   editSyntheticRootPost,
   syntheticRedditConversationFeed,
-} from './fixtures/reddit-conversation-feed.js';
+} from '../../test/fixtures/reddit-conversation-feed.js';
 
 const testEnv = env as typeof env & { TEST_MIGRATIONS: D1Migration[] };
 

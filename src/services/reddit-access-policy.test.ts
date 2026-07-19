@@ -2,12 +2,12 @@ import { applyD1Migrations, env } from 'cloudflare:test';
 import type { D1Migration } from '@cloudflare/vitest-pool-workers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { BackoffAwarePublicShadowRedditTransport } from '../src/services/reddit-access-policy.js';
+import { BackoffAwarePublicShadowRedditTransport } from './reddit-access-policy.js';
 import {
   type RedditResponseMetadata,
   RedditTransportError,
-} from '../src/services/public-shadow-reddit-transport.js';
-import { RedditAccessRepository } from '../src/storage/reddit-access-repository.js';
+} from './public-shadow-reddit-transport.js';
+import { RedditAccessRepository } from '../storage/reddit-access-repository.js';
 
 const NOW = new Date('2026-07-19T01:00:00Z');
 const testEnv = env as typeof env & { TEST_MIGRATIONS: D1Migration[] };

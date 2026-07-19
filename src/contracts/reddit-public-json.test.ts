@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { parsePublicRedditConversation } from '../src/contracts/reddit-public-json.js';
-import { BoundaryValidationError } from '../src/contracts/validation.js';
-import publicConversationFixture from './fixtures/reddit-public-conversation.json' with {
+import publicConversationFixture from '../../test/fixtures/reddit-public-conversation.json' with {
   type: 'json',
 };
+import { parsePublicRedditConversation } from './reddit-public-json.js';
+import { BoundaryValidationError } from './validation.js';
 
 interface MutableThing {
   kind: string;

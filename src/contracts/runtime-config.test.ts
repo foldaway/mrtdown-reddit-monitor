@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseRuntimeConfig } from '../src/contracts/runtime-config.js';
-import { BoundaryValidationError } from '../src/contracts/validation.js';
+import { parseRuntimeConfig } from './runtime-config.js';
+import { BoundaryValidationError } from './validation.js';
 
 const validEnv = {
   REDDIT_TRANSPORT_MODE: 'public-shadow',

@@ -4,9 +4,9 @@ import {
   PublicShadowRedditDiscoveryTransport,
   PublicShadowRedditTransport,
   RedditTransportError,
-} from '../src/services/public-shadow-reddit-transport.js';
-import { syntheticRedditConversationFeed } from './fixtures/reddit-conversation-feed.js';
-import { syntheticRedditSearchFeed } from './fixtures/reddit-search-feed.js';
+} from './public-shadow-reddit-transport.js';
+import { syntheticRedditConversationFeed } from '../../test/fixtures/reddit-conversation-feed.js';
+import { syntheticRedditSearchFeed } from '../../test/fixtures/reddit-search-feed.js';
 
 const NOW = new Date('2026-07-18T01:00:00Z');
 const USER_AGENT = 'mrtdown-reddit-monitor/1.0 (+mailto:ops@example.invalid)';

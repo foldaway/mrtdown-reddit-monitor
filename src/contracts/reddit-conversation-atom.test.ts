@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   REDDIT_CONVERSATION_ATOM_LIMITS,
   parseRedditConversationAtom,
-} from '../src/contracts/reddit-conversation-atom.js';
-import { BoundaryValidationError } from '../src/contracts/validation.js';
+} from './reddit-conversation-atom.js';
+import { BoundaryValidationError } from './validation.js';
 import {
   editSyntheticRootPost,
   syntheticRedditConversationFeed,
-} from './fixtures/reddit-conversation-feed.js';
+} from '../../test/fixtures/reddit-conversation-feed.js';
 
 describe('Reddit conversation Atom boundary', () => {
   it('normalizes a flat post feed without author or parent identity', async () => {

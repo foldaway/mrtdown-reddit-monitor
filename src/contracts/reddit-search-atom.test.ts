@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   REDDIT_SEARCH_ATOM_LIMITS,
   parseRedditSearchAtom,
-} from '../src/contracts/reddit-search-atom.js';
-import { BoundaryValidationError } from '../src/contracts/validation.js';
-import { syntheticRedditSearchFeed } from './fixtures/reddit-search-feed.js';
+} from './reddit-search-atom.js';
+import { BoundaryValidationError } from './validation.js';
+import { syntheticRedditSearchFeed } from '../../test/fixtures/reddit-search-feed.js';
 
 describe('Reddit search Atom boundary', () => {
   it('extracts only validated thread identities and permalinks', () => {

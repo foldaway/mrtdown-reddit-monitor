@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import worker from '../src/index.js';
+import worker from './index.js';
 
 describe('placeholder Worker', () => {
   it('acknowledges requests without content', async () => {
