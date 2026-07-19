@@ -1,6 +1,6 @@
 # Reliability
 
-Status: Scheduled discovery and durable Reddit access policy implemented
+Status: Scheduled discovery, durable access policy, and post selection implemented
 
 Last verified: 2026-07-18
 
@@ -18,6 +18,8 @@ Last verified: 2026-07-18
 - A reply missing from a later RSS snapshot remains stored; only an explicit
   removed or deleted body triggers content purging.
 - Reddit backoff and `Retry-After` take precedence over the nominal schedule.
+- Semantic inference or output-validation failure leaves source evaluation
+  pending so a later invocation can retry without changing its content version.
 
 Use D1 uniqueness constraints and short transactions first. Do not introduce a
 general lease manager, event stream, or transactional outbox unless overlapping
@@ -48,7 +50,8 @@ D1-backed tests now cover discovery replay, candidate/conversation identity
 verification, flat conversation snapshot replay, edited root posts, RSS absence
 semantics, repeated storage, one-Workflow-identity behavior, source-version
 deduplication, durable pending delivery, quota exhaustion, repeated rate limits,
-sustained malformed responses, and scheduled backoff replay. Before shadow
-traffic, add the semantic parser and deployed public-shadow canary. Before
-cutover, exercise credential failure, a failed Workflow step, and a temporary
-site outage.
+sustained malformed responses, scheduled backoff replay, cheap-filter
+rejection, validated semantic selection, and inference retry. Before shadow
+traffic, run the deployed public-shadow canary and sample semantic false
+positives and negatives. Before cutover, exercise credential failure, a failed
+Workflow step, and a temporary site outage.

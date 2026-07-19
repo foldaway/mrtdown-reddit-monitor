@@ -35,10 +35,13 @@ A conversation snapshot service stores the root and flat replies without
 guessing parent relationships or treating feed absence as removal. Runtime
 configuration, Reddit responses, semantic-parser decisions, site
 requests/responses, and stored D1 rows are normalized at explicit boundaries.
+Scheduled discovery applies the legacy crawler's broad rail filter and sends
+only matching pending posts to a structured Workers AI parser. Validated
+decisions are stored once, report decisions receive a stable external report
+ID, and parser failures leave the source pending for invocation retry.
 The migrations enforce version evaluation, delivery, one-Workflow-identity,
 and Reddit access-state invariants. Conversation snapshots are not yet wired to
-a Workflow; there are no Workflow bindings, semantic parser implementation, or
-delivery calls yet.
+a Workflow; there are no Workflow bindings or delivery calls yet.
 
 ## Runtime slices
 
@@ -60,8 +63,9 @@ validated contracts -> D1 repository -> discovery/workflow services -> Worker en
   crowd-report request and records acknowledgement.
 - **Worker entry points** adapt scheduled events and, later, Cloudflare
   Workflows. Scheduled discovery currently catches normalized Reddit transport
-  failures after their pause/stop state is durable; storage and programming
-  failures still fail the invocation.
+  failures after their pause/stop state is durable; semantic inference, storage,
+  and programming failures still fail the invocation so pending evaluation can
+  retry.
 
 Reddit transport, parsing, time, and site transport should be injected so tests
 remain deterministic. Add abstraction only where one of those boundaries needs

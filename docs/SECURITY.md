@@ -1,6 +1,6 @@
 # Security and privacy
 
-Status: Boundary, source-content, and public-shadow stop controls implemented
+Status: Boundary, prompt, source-content, and public-shadow stop controls implemented
 
 Last verified: 2026-07-18
 
@@ -23,6 +23,9 @@ programmatic-report request.
   justifies a pseudonymous, short-lived replacement.
 - Bound stored title/body retention and purge removed content.
 - Restrict source permalinks to allowed Reddit HTTPS origins.
+- Place source text only in the semantic parser's untrusted user message,
+  validate every structured model decision, and normalize failures without
+  source content.
 - Keep public-shadow pause and stop decisions durable. Authentication, block,
   unexpected-content-type, repeated-rate-limit, and sustained-shape failures
   must prevent later scheduled requests until the state is deliberately reset.
@@ -33,6 +36,9 @@ Use safe metadata such as counts, internal IDs, durations, status codes, and
 error categories. Normalize transport errors so response bodies,
 authorization headers, post bodies, reply bodies, and full site request
 payloads are not logged accidentally.
+
+The test configuration deliberately omits the Workers AI binding so local and
+CI validation cannot make billable inference calls.
 
 ## Release gates
 

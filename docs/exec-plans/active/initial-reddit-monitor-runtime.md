@@ -107,6 +107,14 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
 - 2026-07-19: Declared scheduled runtime variables and required secret names in
   `wrangler.jsonc`, regenerated the Worker `Env` interface, and removed the
   manually maintained scheduled-environment type.
+- 2026-07-19: Added legacy-compatible broad rail filtering and a structured
+  Workers AI semantic parser. Scheduled discovery now evaluates pending posts,
+  stores irrelevant or report decisions once, assigns stable report IDs, and
+  leaves inference failures pending for retry. The site acknowledgement
+  boundary now matches the paired endpoint's authoritative response shape.
+- 2026-07-19: Co-located all module test files with their primary source
+  modules. Shared synthetic Reddit fixtures remain under `test/fixtures` so
+  contracts, services, and runtime tests reuse one author-free fixture set.
 
 ## Decisions
 
@@ -124,8 +132,15 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
   Workflow have been observed.
 - Boundary errors contain stable categories rather than untrusted values, and
   normalized Reddit source objects never expose author identity.
-- Site acknowledgement parsing requires only the planned report ID and
-  moderation status so additive response metadata remains compatible.
+- Site acknowledgement parsing consumes the authoritative endpoint envelope
+  and normalizes its report ID and status while allowing additive metadata.
+- The cheap post filter preserves the legacy crawler's word and phrase matches;
+  semantic inference makes the narrower operational-relevance decision.
+- Semantic inference uses the Workers AI Llama 3.3 70B fast model with JSON
+  Schema output. Source text appears only in the untrusted user message, and
+  every result passes the local parser-decision boundary before persistence.
+- Deterministic tests use a separate Wrangler config without the AI binding so
+  validation cannot invoke remote or billable inference.
 - Source content versions and external report IDs use domain-separated SHA-256
   identities over normalized source meaning. Parent relationships, permalinks,
   and timestamps are excluded so RSS/OAuth transport changes do not alter
@@ -191,6 +206,10 @@ Implementation validation:
   scheduled discovery slice, including D1-backed quota pauses, repeated-rate
   and shape-failure stops, runtime replay, safe structured outcomes, and
   generated Cloudflare types.
+- 2026-07-19: `npm run check` passed with 15 test files and 55 tests after the
+  post-selection slice, including legacy-compatible filtering, structured
+  semantic output, prompt/source separation, D1-backed evaluation retry,
+  authoritative site acknowledgement parsing, and scheduled selection.
 
 ## Follow-ups
 

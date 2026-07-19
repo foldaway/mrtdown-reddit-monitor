@@ -6,9 +6,10 @@ Reddit post and reply monitoring for MRTDown crowd reports.
 > boundary contracts, the initial D1 repository, and bounded public-shadow
 > RSS search/conversation transports with D1-backed discovery and conversation
 > snapshot services. Public-shadow discovery is wired to a five-minute
-> scheduled handler with durable D1-backed rate-limit and stop state. Semantic
-> parsing, selection, Cloudflare Workflows, and delivery calls are not yet
-> implemented.
+> scheduled handler with durable D1-backed rate-limit and stop state. A
+> legacy-compatible rail filter and validated Workers AI semantic parser now
+> evaluate stored posts and durably select reports. Cloudflare Workflows and
+> delivery calls are not yet implemented.
 
 ## Repository Guide
 
@@ -233,8 +234,7 @@ generated `Env` interface.
 Expected secrets:
 
 - `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` when OAuth is available;
-- `MRTDOWN_SITE_INGEST_TOKEN`;
-- parser credentials if the selected parsing implementation requires them.
+- `MRTDOWN_SITE_INGEST_TOKEN`.
 
 Expected variables and bindings:
 
@@ -242,6 +242,7 @@ Expected variables and bindings:
 - `REDDIT_USER_AGENT_CONTACT`;
 - `MRTDOWN_SITE_INGEST_URL`;
 - a D1 database binding;
+- a Workers AI binding;
 - a Cloudflare Workflow binding;
 - configured subreddits and discovery query.
 
