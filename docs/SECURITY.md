@@ -1,8 +1,8 @@
 # Security and privacy
 
-Status: Boundary, prompt, source-content, and public-shadow stop controls implemented
+Status: Boundary, prompt, source-content, delivery, and public-shadow controls implemented
 
-Last verified: 2026-07-18
+Last verified: 2026-07-19
 
 ## Trust boundaries
 
@@ -29,6 +29,12 @@ programmatic-report request.
 - Keep public-shadow pause and stop decisions durable. Authentication, block,
   unexpected-content-type, repeated-rate-limit, and sustained-shape failures
   must prevent later scheduled requests until the state is deliberately reset.
+- Send the site credential only to the configured HTTPS ingest URL with manual
+  redirect handling. Bound and validate accepted response bodies, and persist
+  only normalized site failure categories rather than response content.
+- Require the authenticated reference-catalog URL to share the ingest origin.
+  Keep catalog data in a trusted system message, source text in the untrusted
+  user message, and reject model identifiers absent from active memberships.
 
 ## Logging
 

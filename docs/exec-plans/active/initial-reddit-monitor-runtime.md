@@ -15,6 +15,8 @@ The first release is complete when:
   relevant thread;
 - a relevant post is parsed and acknowledged by the site's authenticated
   programmatic crowd-report endpoint;
+- parsed line and station identifiers are grounded in the site's active
+  producer reference catalog before becoming deliverable;
 - the Workflow checks replies at the agreed fixed schedule;
 - each useful new reply becomes one independently idempotent crowd report;
 - temporary delivery failure is retried without duplicate site reports;
@@ -55,15 +57,17 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
    five-minute scheduled handler.
 4. Implement deterministic candidate filters and the semantic parser that
    produces the site's existing structured crowd-report fields.
-5. Implement single-report delivery with stable external IDs and durable
+5. Consume and briefly cache the site's producer reference catalog; ground and
+   validate semantic parser identifiers against active memberships.
+6. Implement single-report delivery with stable external IDs and durable
    acknowledgement/retry state.
-6. Implement one Workflow per relevant thread with checks near `+10m`, `+25m`,
+7. Implement one Workflow per relevant thread with checks near `+10m`, `+25m`,
    `+40m`, `+55m`, `+3h`, `+6h`, and `+24h`.
-7. At each check, store and evaluate new or changed replies; deliver only
+8. At each check, store and evaluate new or changed replies; deliver only
    material service updates as new reports.
-8. Add safe structured metrics for discovery freshness, active Workflows,
+9. Add safe structured metrics for discovery freshness, active Workflows,
    parsing outcomes, and pending delivery age.
-9. Run shadow comparison with the crawler, tune relevance and cadence only
+10. Run shadow comparison with the crawler, tune relevance and cadence only
    from observed misses, and document cutover evidence.
 
 ## Progress
@@ -115,6 +119,21 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
 - 2026-07-19: Co-located all module test files with their primary source
   modules. Shared synthetic Reddit fixtures remain under `test/fixtures` so
   contracts, services, and runtime tests reuse one author-free fixture set.
+- 2026-07-19: Implemented authenticated single-report delivery to the site's
+  authoritative `202` endpoint. The bounded transport validates accepted
+  responses without retaining upstream bodies, D1 records stable retries,
+  response-directed retry timing, terminal failure categories, and durable
+  acknowledgements, and scheduled delivery continues during Reddit backoff.
+- 2026-07-19: Integrated the site's authenticated `v1` producer reference
+  catalog. A bounded transport and D1 cache honor its five-minute cache policy,
+  allow a retryable outage to use at most 24-hour stale data, and keep terminal
+  authentication or contract failures visible. Workers AI receives the catalog
+  separately from untrusted Reddit text and can persist only active site entity
+  IDs with valid station-to-line memberships.
+- 2026-07-20: Adopted pinned Zod 4 validation for the nested producer reference
+  catalog while preserving the monitor's stable, redacted boundary-error
+  categories. Older bounded Reddit parsers remain explicit because their byte,
+  XML, and transport constraints are not schema-validation concerns.
 
 ## Decisions
 
@@ -126,8 +145,10 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
   the initial design.
 - D1 uniqueness and Cloudflare Workflow guarantees are preferred over a
   general leasing system.
-- The runtime Zod schema in the site is authoritative; defer OpenAPI generation
-  until demonstrated need.
+- The runtime Zod schema in the site is authoritative. The monitor keeps a
+  consumer-owned Zod schema for the versioned wire contract rather than sharing
+  runtime source across repositories; defer generated artifacts until observed
+  drift justifies them.
 - Preserve the proven crawler until shadow coverage and one complete 24-hour
   Workflow have been observed.
 - Boundary errors contain stable categories rather than untrusted values, and
@@ -173,6 +194,22 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
   requests in the same invocation until its reset timestamp, or for five
   minutes when Reddit omits the reset. A `429` without usable backoff metadata
   pauses for fifteen minutes.
+- Site delivery follows the endpoint's `202` success contract. Network,
+  throttling, server, and invalid accepted-response failures remain retryable;
+  invalid requests, authentication failures, idempotency conflicts, and
+  unexpected statuses are terminal until operator inspection. Redirects are
+  not followed so the bearer credential cannot be forwarded to another URL.
+- The site's deployed database remains authoritative for reference validity.
+  The monitor consumes the same-origin producer catalog as a briefly cached
+  parser-grounding and pre-delivery validation aid; it does not call
+  `mrtdown-data` directly. Public station codes are lookup hints, while
+  `stationIds` always contain catalog entity IDs.
+- Direct `mrtdown-data` manifest consumption was rejected because hashes and
+  entity IDs do not encode the site's imported-state lag, active membership
+  checks, or code-to-entity mapping. If the catalog integration must be rolled
+  back, remove the provider from semantic parsing and the catalog URL binding;
+  the additive D1 cache table can remain unused while site ingestion continues
+  enforcing references authoritatively.
 
 ## Validation
 
@@ -210,6 +247,19 @@ Implementation validation:
   post-selection slice, including legacy-compatible filtering, structured
   semantic output, prompt/source separation, D1-backed evaluation retry,
   authoritative site acknowledgement parsing, and scheduled selection.
+- 2026-07-19: `npm run check` passed with 17 test files and 67 tests after the
+  delivery slice, including authenticated request construction, bounded
+  response handling, normalized HTTP failures, D1-backed retry and terminal
+  state, stable replay IDs, acknowledgement, and delivery during Reddit
+  backoff.
+- 2026-07-19: `npm run check` passed with 22 test files and 85 tests after the
+  producer-reference-catalog slice, including schema integrity, authenticated
+  bounded fetches, D1 caching and stale fallback, entity-ID grounding, active
+  membership validation, same-origin configuration, and scheduled integration.
+- 2026-07-20: `npm run check` passed with 22 test files and 88 tests after the
+  first Zod migration slice. A Wrangler deployment dry run produced a 145.52
+  KiB gzip upload, and the catalog retained normalized outputs, stable error
+  categories, strict keys, bounds, and cross-record integrity checks.
 
 ## Follow-ups
 

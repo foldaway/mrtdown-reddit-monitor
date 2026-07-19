@@ -8,8 +8,10 @@ Reddit post and reply monitoring for MRTDown crowd reports.
 > snapshot services. Public-shadow discovery is wired to a five-minute
 > scheduled handler with durable D1-backed rate-limit and stop state. A
 > legacy-compatible rail filter and validated Workers AI semantic parser now
-> evaluate stored posts and durably select reports. Cloudflare Workflows and
-> delivery calls are not yet implemented.
+> evaluate stored posts against the site's D1-cached reference catalog and
+> durably select reports. Authenticated, bounded site delivery records
+> acknowledgements, retry timing, and terminal failure categories in D1.
+> Cloudflare Workflows are not yet implemented.
 
 ## Repository Guide
 
@@ -227,7 +229,7 @@ for this volume; add Queues only after measuring a concrete problem.
 ## Configuration
 
 `wrangler.jsonc` defines the current public-shadow mode, discovery communities
-and query, Reddit contact, site ingest URL, and required secret names. Run
+and query, Reddit contact, site ingest and reference-catalog URLs, and required secret names. Run
 `npm run cf-typegen` after changing those bindings; runtime code consumes the
 generated `Env` interface.
 
@@ -241,6 +243,7 @@ Expected variables and bindings:
 - `REDDIT_TRANSPORT_MODE=oauth|public-shadow`;
 - `REDDIT_USER_AGENT_CONTACT`;
 - `MRTDOWN_SITE_INGEST_URL`;
+- `MRTDOWN_SITE_REFERENCE_CATALOG_URL`;
 - a D1 database binding;
 - a Workers AI binding;
 - a Cloudflare Workflow binding;

@@ -2,7 +2,7 @@
 
 Status: Intended minimal runtime boundary
 
-Last verified: 2026-07-18
+Last verified: 2026-07-19
 
 ## System context
 
@@ -36,12 +36,19 @@ guessing parent relationships or treating feed absence as removal. Runtime
 configuration, Reddit responses, semantic-parser decisions, site
 requests/responses, and stored D1 rows are normalized at explicit boundaries.
 Scheduled discovery applies the legacy crawler's broad rail filter and sends
-only matching pending posts to a structured Workers AI parser. Validated
+only matching pending posts to a structured Workers AI parser. The parser is
+grounded with the site's authenticated `v1` reference catalog, cached briefly
+in D1, and rejects unknown entity IDs or invalid active memberships. Validated
 decisions are stored once, report decisions receive a stable external report
-ID, and parser failures leave the source pending for invocation retry.
-The migrations enforce version evaluation, delivery, one-Workflow-identity,
+ID, and parser or catalog failures leave the source pending for invocation retry.
+Pending reports are submitted through a bounded authenticated site transport.
+Accepted and idempotent responses are acknowledged durably; temporary failures
+remain pending until any response-directed retry time, while validation,
+authentication, and external-ID conflicts are retained as terminal categories
+for inspection. Site retries still run when Reddit access is paused.
+The migrations enforce version evaluation, delivery attempts, one-Workflow-identity,
 and Reddit access-state invariants. Conversation snapshots are not yet wired to
-a Workflow; there are no Workflow bindings or delivery calls yet.
+a Workflow; there are no Workflow bindings yet.
 
 ## Runtime slices
 
@@ -52,15 +59,17 @@ validated contracts -> D1 repository -> discovery/workflow services -> Worker en
 ```
 
 - **Validated contracts** parse Reddit responses, configuration, parser
-  results, and site responses.
+  results, the site reference catalog, and site responses.
 - **D1 repository** stores discovered threads and versioned source objects
-  together with parsing and delivery state. Raw source text is cleared after
-  evaluation and purged across versions when Reddit reports removal.
+  together with parsing, delivery state, and one briefly cached site reference
+  catalog. Raw source text is cleared after evaluation and purged across
+  versions when Reddit reports removal.
 - **Discovery service** finds and evaluates new candidate posts.
 - **Workflow service** revisits one selected thread at the fixed polling
   schedule and evaluates new replies.
 - **Delivery service** maps a parsed source object to the site's programmatic
-  crowd-report request and records acknowledgement.
+  crowd-report request, records acknowledgement or a normalized failure, and
+  honors response-directed retry timing without exposing upstream bodies.
 - **Worker entry points** adapt scheduled events and, later, Cloudflare
   Workflows. Scheduled discovery currently catches normalized Reddit transport
   failures after their pause/stop state is durable; semantic inference, storage,
@@ -80,6 +89,8 @@ it; do not pre-build a generic event-processing framework.
 - A relevant thread starts at most one active Workflow.
 - A parsed crowd report has one stable external report ID across retries.
 - The source object is durably pending before delivery is attempted.
+- Parsed line and station entity IDs match the cached active site catalog;
+  site ingestion remains authoritative when the cache is briefly stale.
 - Site acknowledgement is recorded only after an accepted or idempotent-success
   response.
 - Raw source bodies and complete delivery payloads never enter logs or checked-in

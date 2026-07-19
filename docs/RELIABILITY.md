@@ -1,8 +1,8 @@
 # Reliability
 
-Status: Scheduled discovery, durable access policy, and post selection implemented
+Status: Scheduled discovery, post selection, and durable site delivery implemented
 
-Last verified: 2026-07-18
+Last verified: 2026-07-19
 
 ## Guarantees
 
@@ -11,7 +11,10 @@ Last verified: 2026-07-18
 - Selected posts and replies are stored before delivery is attempted.
 - Stable external report IDs make site delivery idempotent.
 - A failed delivery remains visibly pending and can be retried by the next
-  scheduled or Workflow invocation.
+  eligible scheduled or Workflow invocation. `Retry-After` timing gates early
+  retries, and terminal request, authentication, or idempotency failures are
+  excluded from automatic retries until inspected.
+- Pending site delivery still runs while Reddit access is paused or stopped.
 - Workflow steps may repeat without resubmitting acknowledged reports.
 - An edited root post creates a new pending source version, so author-added
   rectifications can be evaluated as resolution reports.
@@ -20,6 +23,9 @@ Last verified: 2026-07-18
 - Reddit backoff and `Retry-After` take precedence over the nominal schedule.
 - Semantic inference or output-validation failure leaves source evaluation
   pending so a later invocation can retry without changing its content version.
+- The site's current reference catalog is cached in D1 for its advertised
+  lifetime. A retryable catalog outage may use a cache no more than 24 hours
+  old; authentication or invalid-contract failures never use stale data.
 
 Use D1 uniqueness constraints and short transactions first. Do not introduce a
 general lease manager, event stream, or transactional outbox unless overlapping
@@ -51,7 +57,8 @@ verification, flat conversation snapshot replay, edited root posts, RSS absence
 semantics, repeated storage, one-Workflow-identity behavior, source-version
 deduplication, durable pending delivery, quota exhaustion, repeated rate limits,
 sustained malformed responses, scheduled backoff replay, cheap-filter
-rejection, validated semantic selection, and inference retry. Before shadow
-traffic, run the deployed public-shadow canary and sample semantic false
+rejection, validated semantic selection, inference retry, site retry timing,
+catalog refresh and stale fallback, terminal delivery state, and acknowledgement. Before shadow traffic, run the
+deployed public-shadow canary, exercise producer credential failure, and sample semantic false
 positives and negatives. Before cutover, exercise credential failure, a failed
 Workflow step, and a temporary site outage.
