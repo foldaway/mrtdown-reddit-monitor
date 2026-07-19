@@ -17,7 +17,8 @@ process.env.MRTDOWN_SITE_INGEST_TOKEN = syntheticSiteIngestToken;
 export default defineConfig({
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: './wrangler.jsonc' },
+      remoteBindings: false,
+      wrangler: { configPath: './wrangler.test.jsonc' },
       miniflare: {
         bindings: {
           MRTDOWN_SITE_INGEST_TOKEN: syntheticSiteIngestToken,

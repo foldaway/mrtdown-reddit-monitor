@@ -2,9 +2,10 @@ import { applyD1Migrations, env } from 'cloudflare:test';
 import type { D1Migration } from '@cloudflare/vitest-pool-workers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { runScheduledDiscovery } from '../src/runtime/scheduled-discovery.js';
-import { syntheticRedditConversationFeed } from './fixtures/reddit-conversation-feed.js';
-import { syntheticRedditSearchFeed } from './fixtures/reddit-search-feed.js';
+import { SemanticParserError } from '../services/workers-ai-semantic-parser.js';
+import { runScheduledDiscovery } from './scheduled-discovery.js';
+import { syntheticRedditConversationFeed } from '../../test/fixtures/reddit-conversation-feed.js';
+import { syntheticRedditSearchFeed } from '../../test/fixtures/reddit-search-feed.js';
 
 const NOW = new Date('2026-07-19T01:00:00Z');
 const testEnv = env as typeof env & { TEST_MIGRATIONS: D1Migration[] };
@@ -13,8 +14,25 @@ const singleCandidateSearchFeed = syntheticRedditSearchFeed.replace(
   '',
 );
 
-function runtimeEnv(): Env {
+function runtimeEnv(
+  aiResponse: unknown = JSON.stringify({
+    decision: 'report',
+    report: {
+      reportScope: 'line',
+      observedAt: '2026-07-19T01:00:00.000Z',
+      lineIds: ['CCL'],
+      stationIds: [],
+      effect: 'delay',
+      isStillHappening: true,
+    },
+  }),
+): Env {
   return {
+    AI: {
+      run: vi.fn().mockResolvedValue({
+        response: aiResponse,
+      }),
+    } as unknown as Ai,
     DB: testEnv.DB,
     REDDIT_TRANSPORT_MODE: 'public-shadow',
     REDDIT_USER_AGENT_CONTACT: 'ops@example.invalid',
@@ -61,6 +79,7 @@ describe('scheduled Reddit discovery runtime', () => {
         insertedSourceVersionCount: 1,
         fetchedConversationCount: 1,
       },
+      evaluation: { pendingCount: 1, reportCount: 1 },
     });
     await expect(
       runScheduledDiscovery(runtimeEnv(), dependencies),
@@ -114,5 +133,42 @@ describe('scheduled Reddit discovery runtime', () => {
       resumeAt: '2026-07-19T01:01:00.000Z',
     });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs a safe parser category and leaves evaluation pending on invalid output', async () => {
+    const log = vi.fn();
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const request = new Request(input);
+      return new Response(
+        request.url.includes('/search.rss')
+          ? singleCandidateSearchFeed
+          : syntheticRedditConversationFeed,
+        {
+          status: 200,
+          headers: { 'content-type': 'application/atom+xml' },
+        },
+      );
+    });
+
+    await expect(
+      runScheduledDiscovery(runtimeEnv('{invalid'), {
+        fetch,
+        now: () => NOW,
+        log,
+      }),
+    ).rejects.toEqual(new SemanticParserError('invalid_response'));
+    expect(log).toHaveBeenLastCalledWith({
+      event: 'reddit_semantic_parser_error',
+      category: 'invalid_response',
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(
+      'Synthetic delay on the Circle Line',
+    );
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM reddit_source_objects
+         WHERE evaluation_status = 'pending'`,
+      ).first('count'),
+    ).toBe(1);
   });
 });

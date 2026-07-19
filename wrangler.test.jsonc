@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mrtdown-reddit-monitor-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-15",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mrtdown-reddit-monitor-test",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

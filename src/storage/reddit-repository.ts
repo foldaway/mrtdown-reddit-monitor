@@ -425,6 +425,28 @@ export class RedditRepository {
     return rows.map(parsePendingDeliveryRow);
   }
 
+  async listPendingEvaluations(limit = 100): Promise<StoredSourceVersion[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new StorageInvariantError('pending_evaluation_limit');
+    }
+    let rows: Record<string, unknown>[];
+    try {
+      const result = await this.database
+        .prepare(
+          `SELECT * FROM reddit_source_objects
+           WHERE evaluation_status = 'pending'
+           ORDER BY first_seen_at, source_external_id, content_version
+           LIMIT ?`,
+        )
+        .bind(limit)
+        .all<Record<string, unknown>>();
+      rows = result.results;
+    } catch {
+      throw new StorageInvariantError('read_failed');
+    }
+    return rows.map(parseSourceVersionRow);
+  }
+
   async getSourceVersion(
     key: SourceVersionKey,
   ): Promise<StoredSourceVersion | null> {

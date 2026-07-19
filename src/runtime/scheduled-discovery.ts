@@ -12,11 +12,23 @@ import {
   type RedditDiscoveryResult,
   runRedditDiscovery,
 } from '../services/reddit-discovery.js';
+import {
+  evaluatePendingSources,
+  type SourceEvaluationResult,
+} from '../services/source-evaluation.js';
+import {
+  SemanticParserError,
+  WorkersAiSemanticParser,
+} from '../services/workers-ai-semantic-parser.js';
 import { RedditAccessRepository } from '../storage/reddit-access-repository.js';
 import { RedditRepository } from '../storage/reddit-repository.js';
 
 export type ScheduledDiscoveryOutcome =
-  | { outcome: 'completed'; discovery: RedditDiscoveryResult }
+  | {
+      outcome: 'completed';
+      discovery: RedditDiscoveryResult;
+      evaluation: SourceEvaluationResult;
+    }
   | {
       outcome: 'paused';
       reason: RedditAccessPausedError['reason'];
@@ -84,11 +96,21 @@ export async function runScheduledDiscovery(
       repository: new RedditRepository(env.DB),
       now: dependencies.now,
     });
+    const repository = new RedditRepository(env.DB);
+    const semanticParser = new WorkersAiSemanticParser({
+      run: (model, input) => env.AI.run(model, input),
+    });
+    const evaluation = await evaluatePendingSources({
+      repository,
+      semanticParser,
+      now: dependencies.now,
+    });
     dependencies.log({
       event: 'reddit_discovery_completed',
       ...discovery,
+      ...evaluation,
     });
-    return { outcome: 'completed', discovery };
+    return { outcome: 'completed', discovery, evaluation };
   } catch (error) {
     if (error instanceof RedditAccessPausedError) {
       const outcome = {
@@ -112,6 +134,12 @@ export async function runScheduledDiscovery(
         ...outcome,
       });
       return outcome;
+    }
+    if (error instanceof SemanticParserError) {
+      dependencies.log({
+        event: 'reddit_semantic_parser_error',
+        category: error.category,
+      });
     }
     throw error;
   }
