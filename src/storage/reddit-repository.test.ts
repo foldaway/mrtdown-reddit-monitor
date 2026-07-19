@@ -2,15 +2,15 @@ import { applyD1Migrations, env } from 'cloudflare:test';
 import type { D1Migration } from '@cloudflare/vitest-pool-workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { RedditSourceObject } from '../src/contracts/reddit-source.js';
+import type { RedditSourceObject } from '../contracts/reddit-source.js';
 import {
   computeContentVersion,
   computeExternalReportId,
-} from '../src/domain/source-identity.js';
+} from '../domain/source-identity.js';
 import {
   RedditRepository,
   StorageInvariantError,
-} from '../src/storage/reddit-repository.js';
+} from './reddit-repository.js';
 
 const firstSeenAt = '2026-07-18T00:00:00.000Z';
 const testEnv = env as typeof env & { TEST_MIGRATIONS: D1Migration[] };
@@ -198,8 +198,13 @@ describe('RedditRepository', () => {
       },
     ]);
     const response = {
-      reportId: 'site-report-synthetic-1',
-      moderationStatus: 'accepted',
+      success: true,
+      data: {
+        id: 'site-report-synthetic-1',
+        status: 'accepted',
+        duplicateOfId: null,
+        idempotentReplay: false,
+      },
     };
     const acknowledged = await repository.recordDeliveryAcknowledgement(
       key,
@@ -210,7 +215,8 @@ describe('RedditRepository', () => {
     expect(acknowledged).toMatchObject({
       deliveryStatus: 'acknowledged',
       acknowledgement: {
-        ...response,
+        reportId: 'site-report-synthetic-1',
+        moderationStatus: 'accepted',
         acknowledgedAt: '2026-07-18T00:03:00.000Z',
       },
     });
@@ -225,7 +231,10 @@ describe('RedditRepository', () => {
     await expect(
       repository.recordDeliveryAcknowledgement(
         key,
-        { ...response, reportId: 'conflicting-site-report' },
+        {
+          ...response,
+          data: { ...response.data, id: 'conflicting-site-report' },
+        },
         '2026-07-18T00:04:00Z',
       ),
     ).rejects.toThrowError(

@@ -61,7 +61,9 @@ export function parseSiteAcceptedResponse(
   input: unknown,
 ): SiteAcceptedResponse {
   const value = parseRecord(input, RESPONSE_BOUNDARY);
-  const moderationStatus = value.moderationStatus;
+  if (value.success !== true) fail(RESPONSE_BOUNDARY, 'success');
+  const data = parseRecord(value.data, RESPONSE_BOUNDARY, 'data');
+  const moderationStatus = data.status;
   if (
     typeof moderationStatus !== 'string' ||
     !MODERATION_STATUSES.includes(
@@ -71,7 +73,7 @@ export function parseSiteAcceptedResponse(
     fail(RESPONSE_BOUNDARY, 'moderation_status');
   }
   return {
-    reportId: parseString(value.reportId, RESPONSE_BOUNDARY, 'report_id', {
+    reportId: parseString(data.id, RESPONSE_BOUNDARY, 'report_id', {
       maximumLength: 256,
     }),
     moderationStatus:

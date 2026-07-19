@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseParserDecision } from '../src/contracts/crowd-report.js';
+import { parseParserDecision } from './crowd-report.js';
 import {
   parseCrowdReportDeliveryRequest,
   parseSiteAcceptedResponse,
-} from '../src/contracts/site.js';
-import { BoundaryValidationError } from '../src/contracts/validation.js';
+} from './site.js';
+import { BoundaryValidationError } from './validation.js';
 
 const validReport = {
   reportScope: 'line',
@@ -81,9 +81,13 @@ describe('site boundary', () => {
   it('validates accepted responses while allowing additive response fields', () => {
     expect(
       parseSiteAcceptedResponse({
-        reportId: 'site-report-synthetic-1',
-        moderationStatus: 'accepted',
-        duplicate: false,
+        success: true,
+        data: {
+          id: 'site-report-synthetic-1',
+          status: 'accepted',
+          duplicateOfId: null,
+          idempotentReplay: false,
+        },
       }),
     ).toEqual({
       reportId: 'site-report-synthetic-1',

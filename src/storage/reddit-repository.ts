@@ -563,8 +563,8 @@ function parseSourceVersionRow(
         corruptRow();
       }
       const parsed = parseSiteAcceptedResponse({
-        reportId: siteReportId,
-        moderationStatus,
+        success: true,
+        data: { id: siteReportId, status: moderationStatus },
       });
       acknowledgement = {
         ...parsed,
