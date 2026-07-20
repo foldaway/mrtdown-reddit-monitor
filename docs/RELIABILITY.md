@@ -62,7 +62,8 @@ semantics, repeated storage, one-Workflow-identity behavior, source-version
 deduplication, durable pending delivery, quota exhaustion, repeated rate limits,
 sustained malformed responses, scheduled backoff replay, cheap-filter
 rejection, validated semantic selection, inference retry, site retry timing,
-catalog refresh and stale fallback, terminal delivery state, and acknowledgement. Before shadow traffic, run the
+catalog refresh and stale fallback, terminal delivery state, acknowledgement,
+and local Workflow completion across every fixed schedule step. Before shadow traffic, run the
 deployed public-shadow canary, exercise producer credential failure, and sample semantic false
 positives and negatives. Before cutover, exercise credential failure, a failed
 Workflow step, and a temporary site outage.

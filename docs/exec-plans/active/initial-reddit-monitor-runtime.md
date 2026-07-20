@@ -147,6 +147,9 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
   active Workflow count, durable evaluation-status counts, and normalized
   Reddit access state. Workflow completion is recorded after the final check,
   so completed monitors are excluded from the active count.
+- 2026-07-21: Added a local Cloudflare Workflow runtime test. It advances the
+  seven fixed sleeps without elapsed time, verifies every named check step,
+  and confirms the final durable completion transition.
 
 ## Decisions
 
@@ -291,6 +294,9 @@ Implementation validation:
   completion removing a monitor from the active count. `npm run check` then
   passed: formatting, lint, types, all 92 tests, and repository-document
   validation.
+- 2026-07-21: `npm run check` passed with 26 test files and 93 tests after
+  adding the local Workflow runtime test for all fixed sleeps and durable
+  completion.
 
 ## Follow-ups
 
