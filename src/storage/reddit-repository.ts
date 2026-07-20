@@ -32,7 +32,11 @@ const SITE_DELIVERY_ERROR_CATEGORIES = [
   'unexpected_status',
 ] as const satisfies readonly SiteDeliveryErrorCategory[];
 
-type EvaluationStatus = 'pending' | 'superseded' | 'irrelevant' | 'report';
+export type SourceEvaluationStatus =
+  | 'pending'
+  | 'superseded'
+  | 'irrelevant'
+  | 'report';
 type DeliveryStatus = 'none' | 'pending' | 'acknowledged';
 type SelectionStatus = 'pending' | 'irrelevant' | 'selected';
 
@@ -47,7 +51,7 @@ export interface StoredSourceVersion {
   isCurrent: boolean;
   firstSeenAt: string;
   lastSeenAt: string;
-  evaluationStatus: EvaluationStatus;
+  evaluationStatus: SourceEvaluationStatus;
   evaluatedAt?: string;
   report?: CrowdReport;
   externalReportId?: string;
@@ -74,8 +78,22 @@ export interface ThreadRecord {
   workflowId?: string;
   workflowAssignedAt?: string;
   workflowStartedAt?: string;
+  workflowCompletedAt?: string;
   firstSeenAt: string;
   lastSeenAt: string;
+}
+
+/**
+ * Aggregate-only operational state. It intentionally excludes source
+ * identities, URLs, text, report payloads, and upstream response bodies so it
+ * can be safely included in structured runtime logs.
+ */
+export interface OperationalMetricsSnapshot {
+  latestDiscoveryAt: string | null;
+  activeWorkflowCount: number;
+  sourceEvaluationStatusCounts: Record<SourceEvaluationStatus, number>;
+  pendingDeliveryCount: number;
+  oldestPendingDeliveryAt: string | null;
 }
 
 export class StorageInvariantError extends Error {
@@ -153,7 +171,7 @@ export class RedditRepository {
       source.lifecycle !== 'active' ||
       current === null ||
       compareVersionHeads({ contentVersion, sourceUpdatedAt }, current) > 0;
-    const evaluationStatus: EvaluationStatus = becomesCurrent
+    const evaluationStatus: SourceEvaluationStatus = becomesCurrent
       ? 'pending'
       : 'superseded';
     const retainedTitle =
@@ -406,6 +424,45 @@ export class RedditRepository {
     return stored;
   }
 
+  async markWorkflowCompleted(
+    threadExternalId: string,
+    workflowId: string,
+    completedAt: string,
+  ): Promise<ThreadRecord> {
+    validateFullname(threadExternalId, 'thread_external_id', 't3_');
+    validateOpaqueId(workflowId, 'workflow_id', 128);
+    const normalizedCompletedAt = normalizeTimestamp(
+      completedAt,
+      'workflow_completed_at',
+    );
+    const thread = await this.getThread(threadExternalId);
+    if (thread === null) throw new StorageInvariantError('missing_thread');
+    if (thread.workflowId !== workflowId) {
+      throw new StorageInvariantError('workflow_identity_mismatch');
+    }
+    if (thread.workflowStartedAt === undefined) {
+      throw new StorageInvariantError('workflow_not_started');
+    }
+    if (thread.workflowCompletedAt !== undefined) return thread;
+
+    await safeRun(
+      this.database
+        .prepare(
+          `UPDATE reddit_threads
+           SET workflow_completed_at = ?
+           WHERE thread_external_id = ? AND workflow_id = ?
+             AND workflow_started_at IS NOT NULL
+             AND workflow_completed_at IS NULL`,
+        )
+        .bind(normalizedCompletedAt, threadExternalId, workflowId),
+    );
+    const stored = await this.getThread(threadExternalId);
+    if (stored?.workflowCompletedAt === undefined) {
+      throw new StorageInvariantError('workflow_completion_write_failed');
+    }
+    return stored;
+  }
+
   async listSelectedThreadsNeedingWorkflow(
     limit = 100,
   ): Promise<ThreadRecord[]> {
@@ -428,6 +485,119 @@ export class RedditRepository {
       throw new StorageInvariantError('read_failed');
     }
     return rows.map(parseThreadRow);
+  }
+
+  async getOperationalMetrics(): Promise<OperationalMetricsSnapshot> {
+    let latestDiscovery: Record<string, unknown> | null;
+    let activeWorkflow: Record<string, unknown> | null;
+    let evaluationRows: Record<string, unknown>[];
+    let pendingDelivery: Record<string, unknown> | null;
+    try {
+      [latestDiscovery, activeWorkflow, evaluationRows, pendingDelivery] =
+        await Promise.all([
+          this.database
+            .prepare(
+              'SELECT MAX(last_seen_at) AS latest_discovery_at FROM reddit_threads',
+            )
+            .first<Record<string, unknown>>(),
+          this.database
+            .prepare(
+              `SELECT COUNT(*) AS active_workflow_count
+               FROM reddit_threads
+               WHERE selection_status = 'selected'
+                 AND workflow_started_at IS NOT NULL
+                 AND workflow_completed_at IS NULL`,
+            )
+            .first<Record<string, unknown>>(),
+          this.database
+            .prepare(
+              `SELECT evaluation_status, COUNT(*) AS count
+               FROM reddit_source_objects
+               GROUP BY evaluation_status`,
+            )
+            .all<Record<string, unknown>>()
+            .then((result) => result.results),
+          this.database
+            .prepare(
+              `SELECT COUNT(*) AS pending_delivery_count,
+                      MIN(first_seen_at) AS oldest_pending_delivery_at
+               FROM reddit_source_objects
+               WHERE delivery_status = 'pending' AND delivery_terminal = 0`,
+            )
+            .first<Record<string, unknown>>(),
+        ]);
+    } catch {
+      throw new StorageInvariantError('read_failed');
+    }
+
+    try {
+      if (
+        latestDiscovery === null ||
+        activeWorkflow === null ||
+        pendingDelivery === null
+      ) {
+        corruptRow();
+      }
+      const sourceEvaluationStatusCounts: Record<
+        SourceEvaluationStatus,
+        number
+      > = {
+        pending: 0,
+        superseded: 0,
+        irrelevant: 0,
+        report: 0,
+      };
+      for (const row of evaluationRows) {
+        const status = rowEnum(row, 'evaluation_status', [
+          'pending',
+          'superseded',
+          'irrelevant',
+          'report',
+        ] as const);
+        sourceEvaluationStatusCounts[status] = rowNonNegativeInteger(
+          row,
+          'count',
+        );
+      }
+      const latestDiscoveryAt = rowNullableString(
+        latestDiscovery,
+        'latest_discovery_at',
+      );
+      const oldestPendingDeliveryAt = rowNullableString(
+        pendingDelivery,
+        'oldest_pending_delivery_at',
+      );
+      return {
+        latestDiscoveryAt:
+          latestDiscoveryAt === null
+            ? null
+            : normalizeTimestamp(latestDiscoveryAt, 'latest_discovery_at'),
+        activeWorkflowCount: rowNonNegativeInteger(
+          activeWorkflow,
+          'active_workflow_count',
+        ),
+        sourceEvaluationStatusCounts,
+        pendingDeliveryCount: rowNonNegativeInteger(
+          pendingDelivery,
+          'pending_delivery_count',
+        ),
+        oldestPendingDeliveryAt:
+          oldestPendingDeliveryAt === null
+            ? null
+            : normalizeTimestamp(
+                oldestPendingDeliveryAt,
+                'oldest_pending_delivery_at',
+              ),
+      };
+    } catch (error) {
+      if (
+        error instanceof StorageInvariantError &&
+        error.code === 'corrupt_row'
+      ) {
+        throw error;
+      }
+      throw new StorageInvariantError('corrupt_row');
+    }
   }
 
   async recordDeliveryAcknowledgement(
@@ -897,10 +1067,17 @@ function parseThreadRow(row: Record<string, unknown>): ThreadRecord {
       row,
       'workflow_started_at',
     );
+    const workflowCompletedAtValue = rowNullableString(
+      row,
+      'workflow_completed_at',
+    );
     if ((workflowId === null) !== (workflowAssignedAtValue === null)) {
       corruptRow();
     }
     if (workflowStartedAtValue !== null && workflowId === null) corruptRow();
+    if (workflowCompletedAtValue !== null && workflowStartedAtValue === null) {
+      corruptRow();
+    }
     if (workflowId !== null) validateOpaqueId(workflowId, 'workflow_id', 128);
     return {
       threadExternalId,
@@ -921,6 +1098,14 @@ function parseThreadRow(row: Record<string, unknown>): ThreadRecord {
             workflowStartedAt: normalizeTimestamp(
               workflowStartedAtValue,
               'workflow_started_at',
+            ),
+          }),
+      ...(workflowCompletedAtValue === null
+        ? {}
+        : {
+            workflowCompletedAt: normalizeTimestamp(
+              workflowCompletedAtValue,
+              'workflow_completed_at',
             ),
           }),
       firstSeenAt: rowTimestamp(row, 'first_seen_at'),

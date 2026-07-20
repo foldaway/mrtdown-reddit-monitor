@@ -1,6 +1,6 @@
 # Quality score
 
-Last verified: 2026-07-19
+Last verified: 2026-07-20
 
 Grades describe evidence in the repository, not intended future behavior.
 
@@ -12,7 +12,7 @@ Grades describe evidence in the repository, not intended future behavior.
 | Unit testing | B- | Deterministic tests cover the rail filter, catalog-grounded semantic adapter, runtime config, bounded Reddit/site/catalog transports, source identities, site contracts, and Workflow start recovery | Exercise the Workflow runner against Cloudflare's local Workflow runtime |
 | Integration testing | B- | D1-backed tests cover scheduled discovery, semantic selection, reference-catalog caching, Reddit backoff, snapshots, version evaluation, site delivery retry/terminal state, acknowledgement, content purge, and thread-scoped Workflow checks | Add a full local Workflow sleep-schedule test |
 | Contract testing | C- | Synthetic consumer tests mirror the site's authoritative request and accepted-response schema; the nested reference catalog uses a strict consumer-owned Zod schema | Automate cross-repository contract drift detection if drift recurs |
-| Observability | D+ | Scheduled discovery and Workflow checks emit redacted discovery, parsing, delivery, and failure-category counts with local content-leak assertions | Add a shared structured event schema plus pending-age metrics |
+| Observability | C- | Scheduler and Workflow events carry a tested, aggregate-only D1 metrics snapshot for freshness, active Workflows, parser outcomes, pending-delivery age, and Reddit access state | Add a shared structured event schema and alert thresholds |
 | Security/privacy | C+ | Boundary validation, trusted-catalog/source prompt separation, normalized parser failures, bounded transport errors, author-free normalization, and evaluated/removed content purging are tested | Add retention-window and production secret-rotation checks |
 | Deployment safety | D+ | Deterministic pull-request CI, test-only config that excludes billable AI access, explicit five-minute cron, generated Workflow binding types, and durable public-shadow stop state | Add preview environment and rollback runbook |
 

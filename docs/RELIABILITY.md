@@ -1,8 +1,8 @@
 # Reliability
 
-Status: Scheduled discovery, post selection, and durable site delivery implemented
+Status: Scheduled discovery, post selection, durable site delivery, and safe runtime metrics implemented
 
-Last verified: 2026-07-19
+Last verified: 2026-07-20
 
 ## Guarantees
 
@@ -44,11 +44,15 @@ Network failures, throttling, and server errors remain pending for bounded
 retry. A Workflow should record its current step so Cloudflare retry does not
 lose or duplicate work.
 
+Started and completed Workflow timestamps make the active-Workflow metric
+durable without treating completed monitors as active.
+
 ## Required signals
 
-Track discovery freshness and candidate counts, active Workflow counts, poll
-outcomes, parsed relevant posts and replies, pending delivery count and age,
-site response categories, and Reddit rate-limit state.
+Structured scheduler and Workflow events now include discovery freshness, active
+Workflow count, durable parser-outcome counts, pending delivery count and age,
+and normalized Reddit rate-limit state. Invocation outcomes include candidate,
+poll, and site-response-category counts.
 
 ## Validation milestones
 

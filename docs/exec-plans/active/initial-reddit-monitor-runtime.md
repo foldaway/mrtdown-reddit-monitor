@@ -142,6 +142,11 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
   that thread's pending versions, and delivers its useful reports. D1 records
   a successful Workflow start separately from its reserved identity so failed
   creation remains retryable.
+- 2026-07-20: Added aggregate-only D1 runtime metrics to scheduled discovery
+  and each Workflow check. Metrics contain freshness and pending-delivery ages,
+  active Workflow count, durable evaluation-status counts, and normalized
+  Reddit access state. Workflow completion is recorded after the final check,
+  so completed monitors are excluded from the active count.
 
 ## Decisions
 
@@ -222,6 +227,9 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
   Cloudflare's instance-ID bound, and D1 reserves it before creation. If the
   create response is ambiguous, the starter inspects the existing instance and
   records it as started rather than issuing another instance for the thread.
+- Observability reads only D1 aggregate queries and the normalized Reddit
+  access record. Event logs contain ages and counts rather than source IDs,
+  timestamps, URLs, bodies, site payloads, or upstream response data.
 
 ## Validation
 
@@ -277,6 +285,12 @@ Implementation validation:
   D1-backed Workflow start recording, ambiguous-create recovery, and a
   thread-scoped snapshot/evaluate/deliver check. `npm run check` then passed:
   formatting, lint, types, all 91 tests, and repository-document validation.
+- 2026-07-20: `npm run format`, `npm run typecheck`, and `npm test` passed
+  with 25 test files and 92 tests after the metrics slice. The tests cover
+  D1-backed aggregate metrics, safe scheduler log snapshots, and Workflow
+  completion removing a monitor from the active count. `npm run check` then
+  passed: formatting, lint, types, all 92 tests, and repository-document
+  validation.
 
 ## Follow-ups
 

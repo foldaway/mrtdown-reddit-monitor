@@ -2,7 +2,7 @@
 
 Status: Boundary, prompt, source-content, delivery, and public-shadow controls implemented
 
-Last verified: 2026-07-19
+Last verified: 2026-07-20
 
 ## Trust boundaries
 
@@ -38,8 +38,9 @@ programmatic-report request.
 
 ## Logging
 
-Use safe metadata such as counts, internal IDs, durations, status codes, and
-error categories. Normalize transport errors so response bodies,
+Use safe metadata such as counts, durations, status codes, and error
+categories. Aggregate D1 metrics may include only freshness or pending ages,
+state counts, and normalized Reddit access state. Normalize transport errors so response bodies,
 authorization headers, post bodies, reply bodies, and full site request
 payloads are not logged accidentally.
 

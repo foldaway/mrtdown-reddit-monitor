@@ -2,7 +2,7 @@
 
 Status: Intended minimal runtime boundary
 
-Last verified: 2026-07-19
+Last verified: 2026-07-20
 
 ## System context
 
@@ -47,9 +47,12 @@ remain pending until any response-directed retry time, while validation,
 authentication, and external-ID conflicts are retained as terminal categories
 for inspection. Site retries still run when Reddit access is paused.
 The migrations enforce version evaluation, delivery attempts, one-Workflow
-identity and start state, and Reddit access-state invariants. A configured
-Cloudflare Workflow uses the durable thread identity, sleeps to the fixed check
-times, then snapshots and evaluates only that thread before delivery.
+identity with start and completion state, and Reddit access-state invariants. A
+configured Cloudflare Workflow uses the durable thread identity, sleeps to the
+fixed check times, then snapshots and evaluates only that thread before
+delivery. Scheduler and Workflow logs include an aggregate-only D1 metrics
+snapshot: freshness age, active Workflow count, evaluation counts, pending
+delivery age, and normalized Reddit access state.
 
 ## Runtime slices
 
@@ -72,7 +75,8 @@ validated contracts -> D1 repository -> discovery/workflow services -> Worker en
 - **Delivery service** maps a parsed source object to the site's programmatic
   crowd-report request, records acknowledgement or a normalized failure, and
   honors response-directed retry timing without exposing upstream bodies.
-- **Worker entry points** adapt scheduled discovery and Cloudflare Workflows.
+- **Worker entry points** adapt scheduled discovery and Cloudflare Workflows,
+  emitting aggregate-only metrics after each safe outcome.
   Scheduled discovery starts selected thread monitors after durable delivery;
   each Workflow snapshots, evaluates, and delivers only its own thread.
   Normalized Reddit pause and transport failures do not abort a check, while

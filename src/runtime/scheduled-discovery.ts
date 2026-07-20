@@ -34,6 +34,7 @@ import {
   SemanticParserError,
   WorkersAiSemanticParser,
 } from '../services/workers-ai-semantic-parser.js';
+import { collectRuntimeMetrics } from '../services/runtime-metrics.js';
 import { RedditAccessRepository } from '../storage/reddit-access-repository.js';
 import { ReferenceCatalogRepository } from '../storage/reference-catalog-repository.js';
 import { RedditRepository } from '../storage/reddit-repository.js';
@@ -135,13 +136,13 @@ export async function runScheduledDiscovery(
       config.site,
       dependencies,
     );
-    dependencies.log({
-      event: 'reddit_discovery_completed',
-      ...discovery,
-      ...evaluation,
-      ...delivery,
-      ...workflowStart,
-    });
+    await logRuntimeEvent(
+      dependencies,
+      repository,
+      accessRepository,
+      'reddit_discovery_completed',
+      { ...discovery, ...evaluation, ...delivery, ...workflowStart },
+    );
     return {
       outcome: 'completed',
       discovery,
@@ -164,7 +165,13 @@ export async function runScheduledDiscovery(
         delivery,
         workflowStart,
       };
-      dependencies.log({ event: 'reddit_discovery_paused', ...outcome });
+      await logRuntimeEvent(
+        dependencies,
+        repository,
+        accessRepository,
+        'reddit_discovery_paused',
+        outcome,
+      );
       return outcome;
     }
     if (error instanceof RedditTransportError) {
@@ -183,28 +190,55 @@ export async function runScheduledDiscovery(
         delivery,
         workflowStart,
       };
-      dependencies.log({
-        event: 'reddit_discovery_transport_error',
-        ...outcome,
-      });
+      await logRuntimeEvent(
+        dependencies,
+        repository,
+        accessRepository,
+        'reddit_discovery_transport_error',
+        outcome,
+      );
       return outcome;
     }
     if (error instanceof SemanticParserError) {
       await runDeliveryAndStart(repository, env, config.site, dependencies);
-      dependencies.log({
-        event: 'reddit_semantic_parser_error',
-        category: error.category,
-      });
+      await logRuntimeEvent(
+        dependencies,
+        repository,
+        accessRepository,
+        'reddit_semantic_parser_error',
+        { category: error.category },
+      );
     }
     if (error instanceof ReferenceCatalogTransportError) {
       await runDeliveryAndStart(repository, env, config.site, dependencies);
-      dependencies.log({
-        event: 'site_reference_catalog_error',
-        category: error.category,
-      });
+      await logRuntimeEvent(
+        dependencies,
+        repository,
+        accessRepository,
+        'site_reference_catalog_error',
+        { category: error.category },
+      );
     }
     throw error;
   }
+}
+
+async function logRuntimeEvent(
+  dependencies: ScheduledDiscoveryDependencies,
+  repository: RedditRepository,
+  accessRepository: RedditAccessRepository,
+  event: string,
+  details: object,
+): Promise<void> {
+  dependencies.log({
+    event,
+    ...details,
+    metrics: await collectRuntimeMetrics({
+      repository,
+      accessRepository,
+      now: dependencies.now,
+    }),
+  });
 }
 
 function createReferenceCatalogCache(

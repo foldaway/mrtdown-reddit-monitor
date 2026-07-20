@@ -127,6 +127,19 @@ describe('scheduled Reddit discovery runtime', () => {
       expect.objectContaining({
         event: 'reddit_discovery_completed',
         existingThreadCount: 1,
+        metrics: {
+          discoveryFreshnessSeconds: 0,
+          activeWorkflowCount: 1,
+          sourceEvaluationStatusCounts: {
+            pending: 0,
+            superseded: 0,
+            irrelevant: 0,
+            report: 1,
+          },
+          pendingDeliveryCount: 0,
+          oldestPendingDeliveryAgeSeconds: null,
+          redditAccess: { state: 'ready', rateLimitRemaining: null },
+        },
       }),
     );
     expect(JSON.stringify(log.mock.calls)).not.toContain(
@@ -258,10 +271,15 @@ describe('scheduled Reddit discovery runtime', () => {
         log,
       }),
     ).rejects.toEqual(new SemanticParserError('invalid_response'));
-    expect(log).toHaveBeenLastCalledWith({
-      event: 'reddit_semantic_parser_error',
-      category: 'invalid_response',
-    });
+    expect(log).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        event: 'reddit_semantic_parser_error',
+        category: 'invalid_response',
+        metrics: expect.objectContaining({
+          sourceEvaluationStatusCounts: expect.objectContaining({ pending: 1 }),
+        }),
+      }),
+    );
     expect(JSON.stringify(log.mock.calls)).not.toContain(
       'Synthetic delay on the Circle Line',
     );

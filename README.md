@@ -12,7 +12,9 @@ Reddit post and reply monitoring for MRTDown crowd reports.
 > durably select reports. Authenticated, bounded site delivery records
 > acknowledgements, retry timing, and terminal failure categories in D1.
 > Cloudflare Workflows now revisit each selected thread at the fixed schedule,
-> storing, evaluating, and delivering useful reply updates independently.
+> storing, evaluating, and delivering useful reply updates independently. Safe
+> structured runtime metrics expose durable freshness, active Workflow,
+> evaluation, delivery-age, and Reddit-access state without logging source data.
 
 ## Repository Guide
 

@@ -25,6 +25,7 @@ import {
   SemanticParserError,
   WorkersAiSemanticParser,
 } from '../services/workers-ai-semantic-parser.js';
+import { collectRuntimeMetrics } from '../services/runtime-metrics.js';
 import { RedditAccessRepository } from '../storage/reddit-access-repository.js';
 import { ReferenceCatalogRepository } from '../storage/reference-catalog-repository.js';
 import { RedditRepository } from '../storage/reddit-repository.js';
@@ -78,6 +79,14 @@ export class RedditThreadWorkflow extends WorkflowEntrypoint<
       );
     }
 
+    await step.do('record completion', async () =>
+      new RedditRepository(this.env.DB).markWorkflowCompleted(
+        parameters.threadExternalId,
+        parameters.threadExternalId,
+        new Date().toISOString(),
+      ),
+    );
+
     return { checkCount: THREAD_WORKFLOW_POLL_OFFSETS_MINUTES.length };
   }
 }
@@ -95,6 +104,7 @@ export async function runThreadWorkflowRuntime(
     parseThreadWorkflowParameters(parameters).threadExternalId;
   const userAgent = `mrtdown-reddit-monitor/1.0 (contact: ${config.reddit.userAgentContact})`;
   const repository = new RedditRepository(env.DB);
+  const accessRepository = new RedditAccessRepository(env.DB);
   const conversationTransport = new BackoffAwarePublicShadowRedditTransport(
     new PublicShadowRedditDiscoveryTransport({
       fetch: dependencies.fetch,
@@ -106,7 +116,7 @@ export async function runThreadWorkflowRuntime(
       userAgent,
       now: dependencies.now,
     }),
-    new RedditAccessRepository(env.DB),
+    accessRepository,
     dependencies.now,
   );
   const semanticParser = new WorkersAiSemanticParser(
@@ -129,7 +139,7 @@ export async function runThreadWorkflowRuntime(
   });
 
   try {
-    return await runThreadWorkflowCheck({
+    const outcome = await runThreadWorkflowCheck({
       threadExternalId,
       repository,
       conversationTransport,
@@ -137,17 +147,35 @@ export async function runThreadWorkflowRuntime(
       deliveryTransport,
       now: dependencies.now,
     });
+    return {
+      ...outcome,
+      metrics: await collectRuntimeMetrics({
+        repository,
+        accessRepository,
+        now: dependencies.now,
+      }),
+    };
   } catch (error) {
     if (error instanceof SemanticParserError) {
       dependencies.log({
         event: 'reddit_thread_workflow_parser_error',
         category: error.category,
+        metrics: await collectRuntimeMetrics({
+          repository,
+          accessRepository,
+          now: dependencies.now,
+        }),
       });
     }
     if (error instanceof ReferenceCatalogTransportError) {
       dependencies.log({
         event: 'reddit_thread_workflow_reference_catalog_error',
         category: error.category,
+        metrics: await collectRuntimeMetrics({
+          repository,
+          accessRepository,
+          now: dependencies.now,
+        }),
       });
     }
     throw error;
