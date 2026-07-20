@@ -134,6 +134,14 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
   catalog while preserving the monitor's stable, redacted boundary-error
   categories. Older bounded Reddit parsers remain explicit because their byte,
   XML, and transport constraints are not schema-validation concerns.
+- 2026-07-20: Implemented the fixed per-thread Cloudflare Workflow. Scheduled
+  discovery reserves a deterministic instance ID for selected threads, starts
+  it once, and recovers an already-created instance after an ambiguous create
+  response. The Workflow sleeps to `+10m`, `+25m`, `+40m`, `+55m`, `+3h`,
+  `+6h`, and `+24h`; each check persists a flat RSS snapshot, evaluates only
+  that thread's pending versions, and delivers its useful reports. D1 records
+  a successful Workflow start separately from its reserved identity so failed
+  creation remains retryable.
 
 ## Decisions
 
@@ -210,6 +218,10 @@ approval is pending and only after a deployed Cloudflare canary succeeds.
   back, remove the provider from semantic parsing and the catalog URL binding;
   the additive D1 cache table can remain unused while site ingestion continues
   enforcing references authoritatively.
+- The Workflow instance ID is the Reddit thread fullname. It is stable, within
+  Cloudflare's instance-ID bound, and D1 reserves it before creation. If the
+  create response is ambiguous, the starter inspects the existing instance and
+  records it as started rather than issuing another instance for the thread.
 
 ## Validation
 
@@ -260,6 +272,11 @@ Implementation validation:
   first Zod migration slice. A Wrangler deployment dry run produced a 145.52
   KiB gzip upload, and the catalog retained normalized outputs, stable error
   categories, strict keys, bounds, and cross-record integrity checks.
+- 2026-07-20: `npm run format`, `npm run typecheck`, and `npm test` passed
+  with 24 test files and 91 tests after the Workflow slice. The tests cover
+  D1-backed Workflow start recording, ambiguous-create recovery, and a
+  thread-scoped snapshot/evaluate/deliver check. `npm run check` then passed:
+  formatting, lint, types, all 91 tests, and repository-document validation.
 
 ## Follow-ups
 

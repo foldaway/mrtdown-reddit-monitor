@@ -171,6 +171,23 @@ describe('RedditRepository', () => {
       assigned: false,
       workflowId: 'workflow.synthetic.1',
     });
+    await expect(
+      repository.listSelectedThreadsNeedingWorkflow(),
+    ).resolves.toEqual([
+      expect.objectContaining({ workflowId: 'workflow.synthetic.1' }),
+    ]);
+    await expect(
+      repository.markWorkflowStarted(
+        source.threadExternalId,
+        'workflow.synthetic.1',
+        '2026-07-18T00:04:00Z',
+      ),
+    ).resolves.toMatchObject({
+      workflowStartedAt: '2026-07-18T00:04:00.000Z',
+    });
+    await expect(
+      repository.listSelectedThreadsNeedingWorkflow(),
+    ).resolves.toEqual([]);
   });
 
   it('keeps failed delivery pending and records an idempotent acknowledgement', async () => {

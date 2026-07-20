@@ -27,6 +27,13 @@
   "ai": {
     "binding": "AI"
   },
+  "workflows": [
+    {
+      "name": "mrtdown-reddit-thread-monitor",
+      "binding": "REDDIT_THREAD_WORKFLOW",
+      "class_name": "RedditThreadWorkflow"
+    }
+  ],
   "observability": {
     "logs": { "enabled": true }
   }

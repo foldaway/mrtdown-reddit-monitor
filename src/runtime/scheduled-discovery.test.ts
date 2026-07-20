@@ -44,6 +44,16 @@ function runtimeEnv(
     MRTDOWN_SITE_REFERENCE_CATALOG_URL:
       'https://example.invalid/internal/api/reference-catalog/v1',
     MRTDOWN_SITE_INGEST_TOKEN: 'synthetic-site-token',
+    REDDIT_THREAD_WORKFLOW: {
+      create: vi.fn(async ({ id }: { id: string }) => ({
+        id,
+        status: async () => ({ status: 'queued' }),
+      })),
+      get: vi.fn(async (id: string) => ({
+        id,
+        status: async () => ({ status: 'queued' }),
+      })),
+    } as unknown as Workflow,
   };
 }
 

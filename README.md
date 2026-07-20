@@ -11,7 +11,8 @@ Reddit post and reply monitoring for MRTDown crowd reports.
 > evaluate stored posts against the site's D1-cached reference catalog and
 > durably select reports. Authenticated, bounded site delivery records
 > acknowledgements, retry timing, and terminal failure categories in D1.
-> Cloudflare Workflows are not yet implemented.
+> Cloudflare Workflows now revisit each selected thread at the fixed schedule,
+> storing, evaluating, and delivering useful reply updates independently.
 
 ## Repository Guide
 
@@ -101,7 +102,7 @@ For a relevant post:
 3. Assign a stable opaque `externalReportId`.
 4. Submit it to the site's programmatic crowd-report endpoint.
 5. Record the acknowledgement or retryable error alongside the stored post.
-6. Start one Workflow for its thread.
+6. Reserve and start one Workflow for its thread.
 
 ### Reply workflow
 
@@ -229,7 +230,8 @@ for this volume; add Queues only after measuring a concrete problem.
 ## Configuration
 
 `wrangler.jsonc` defines the current public-shadow mode, discovery communities
-and query, Reddit contact, site ingest and reference-catalog URLs, and required secret names. Run
+and query, Reddit contact, site ingest and reference-catalog URLs, the thread
+Workflow binding, and required secret names. Run
 `npm run cf-typegen` after changing those bindings; runtime code consumes the
 generated `Env` interface.
 

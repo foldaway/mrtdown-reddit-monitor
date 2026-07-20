@@ -1,4 +1,5 @@
 import { runScheduledDiscovery } from './runtime/scheduled-discovery.js';
+export { RedditThreadWorkflow } from './runtime/reddit-thread-workflow.js';
 
 export default {
   async fetch() {

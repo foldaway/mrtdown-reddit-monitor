@@ -9,5 +9,12 @@
       "database_name": "mrtdown-reddit-monitor-test",
       "migrations_dir": "migrations"
     }
+  ],
+  "workflows": [
+    {
+      "name": "mrtdown-reddit-thread-monitor-test",
+      "binding": "REDDIT_THREAD_WORKFLOW",
+      "class_name": "RedditThreadWorkflow"
+    }
   ]
 }

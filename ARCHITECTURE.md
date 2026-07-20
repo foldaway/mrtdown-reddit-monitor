@@ -46,9 +46,10 @@ Accepted and idempotent responses are acknowledged durably; temporary failures
 remain pending until any response-directed retry time, while validation,
 authentication, and external-ID conflicts are retained as terminal categories
 for inspection. Site retries still run when Reddit access is paused.
-The migrations enforce version evaluation, delivery attempts, one-Workflow-identity,
-and Reddit access-state invariants. Conversation snapshots are not yet wired to
-a Workflow; there are no Workflow bindings yet.
+The migrations enforce version evaluation, delivery attempts, one-Workflow
+identity and start state, and Reddit access-state invariants. A configured
+Cloudflare Workflow uses the durable thread identity, sleeps to the fixed check
+times, then snapshots and evaluates only that thread before delivery.
 
 ## Runtime slices
 
@@ -65,16 +66,17 @@ validated contracts -> D1 repository -> discovery/workflow services -> Worker en
   catalog. Raw source text is cleared after evaluation and purged across
   versions when Reddit reports removal.
 - **Discovery service** finds and evaluates new candidate posts.
-- **Workflow service** revisits one selected thread at the fixed polling
-  schedule and evaluates new replies.
+- **Workflow service** reserves a deterministic Cloudflare instance ID for each
+  selected thread, recovers an already-created instance after an ambiguous
+  create response, and revisits that thread at the fixed polling schedule.
 - **Delivery service** maps a parsed source object to the site's programmatic
   crowd-report request, records acknowledgement or a normalized failure, and
   honors response-directed retry timing without exposing upstream bodies.
-- **Worker entry points** adapt scheduled events and, later, Cloudflare
-  Workflows. Scheduled discovery currently catches normalized Reddit transport
-  failures after their pause/stop state is durable; semantic inference, storage,
-  and programming failures still fail the invocation so pending evaluation can
-  retry.
+- **Worker entry points** adapt scheduled discovery and Cloudflare Workflows.
+  Scheduled discovery starts selected thread monitors after durable delivery;
+  each Workflow snapshots, evaluates, and delivers only its own thread.
+  Normalized Reddit pause and transport failures do not abort a check, while
+  semantic inference, storage, and programming failures retry the durable step.
 
 Reddit transport, parsing, time, and site transport should be injected so tests
 remain deterministic. Add abstraction only where one of those boundaries needs

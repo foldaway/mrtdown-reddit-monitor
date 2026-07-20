@@ -23,6 +23,10 @@ import {
 } from '../services/source-delivery.js';
 import { SiteCrowdReportTransport } from '../services/site-crowd-report-transport.js';
 import {
+  startSelectedThreadWorkflows,
+  type ThreadWorkflowStartResult,
+} from '../services/thread-workflow-starter.js';
+import {
   ReferenceCatalogTransportError,
   SiteReferenceCatalogTransport,
 } from '../services/site-reference-catalog-transport.js';
@@ -40,12 +44,14 @@ export type ScheduledDiscoveryOutcome =
       discovery: RedditDiscoveryResult;
       evaluation: SourceEvaluationResult;
       delivery: SourceDeliveryResult;
+      workflowStart: ThreadWorkflowStartResult;
     }
   | {
       outcome: 'paused';
       reason: RedditAccessPausedError['reason'];
       resumeAt: string | null;
       delivery: SourceDeliveryResult;
+      workflowStart: ThreadWorkflowStartResult;
     }
   | {
       outcome: 'transport_error';
@@ -53,6 +59,7 @@ export type ScheduledDiscoveryOutcome =
       resumeAt: string | null;
       disabled: boolean;
       delivery: SourceDeliveryResult;
+      workflowStart: ThreadWorkflowStartResult;
     };
 
 interface ScheduledDiscoveryDependencies {
@@ -122,35 +129,59 @@ export async function runScheduledDiscovery(
       semanticParser,
       now: dependencies.now,
     });
-    const delivery = await runDelivery(repository, config.site, dependencies);
+    const { delivery, workflowStart } = await runDeliveryAndStart(
+      repository,
+      env,
+      config.site,
+      dependencies,
+    );
     dependencies.log({
       event: 'reddit_discovery_completed',
       ...discovery,
       ...evaluation,
       ...delivery,
+      ...workflowStart,
     });
-    return { outcome: 'completed', discovery, evaluation, delivery };
+    return {
+      outcome: 'completed',
+      discovery,
+      evaluation,
+      delivery,
+      workflowStart,
+    };
   } catch (error) {
     if (error instanceof RedditAccessPausedError) {
-      const delivery = await runDelivery(repository, config.site, dependencies);
+      const { delivery, workflowStart } = await runDeliveryAndStart(
+        repository,
+        env,
+        config.site,
+        dependencies,
+      );
       const outcome = {
         outcome: 'paused' as const,
         reason: error.reason,
         resumeAt: error.resumeAt,
         delivery,
+        workflowStart,
       };
       dependencies.log({ event: 'reddit_discovery_paused', ...outcome });
       return outcome;
     }
     if (error instanceof RedditTransportError) {
       const state = await accessRepository.getState();
-      const delivery = await runDelivery(repository, config.site, dependencies);
+      const { delivery, workflowStart } = await runDeliveryAndStart(
+        repository,
+        env,
+        config.site,
+        dependencies,
+      );
       const outcome = {
         outcome: 'transport_error' as const,
         category: error.category,
         resumeAt: state?.blockedUntil ?? null,
         disabled: state?.disabledReason != null,
         delivery,
+        workflowStart,
       };
       dependencies.log({
         event: 'reddit_discovery_transport_error',
@@ -159,14 +190,14 @@ export async function runScheduledDiscovery(
       return outcome;
     }
     if (error instanceof SemanticParserError) {
-      await runDelivery(repository, config.site, dependencies);
+      await runDeliveryAndStart(repository, env, config.site, dependencies);
       dependencies.log({
         event: 'reddit_semantic_parser_error',
         category: error.category,
       });
     }
     if (error instanceof ReferenceCatalogTransportError) {
-      await runDelivery(repository, config.site, dependencies);
+      await runDeliveryAndStart(repository, env, config.site, dependencies);
       dependencies.log({
         event: 'site_reference_catalog_error',
         category: error.category,
@@ -195,12 +226,16 @@ function createReferenceCatalogCache(
   );
 }
 
-function runDelivery(
+async function runDeliveryAndStart(
   repository: RedditRepository,
+  env: Env,
   site: { ingestUrl: string; ingestToken: string },
   dependencies: ScheduledDiscoveryDependencies,
-): Promise<SourceDeliveryResult> {
-  return deliverPendingSources({
+): Promise<{
+  delivery: SourceDeliveryResult;
+  workflowStart: ThreadWorkflowStartResult;
+}> {
+  const delivery = await deliverPendingSources({
     repository,
     transport: new SiteCrowdReportTransport({
       fetch: dependencies.fetch,
@@ -210,4 +245,10 @@ function runDelivery(
     }),
     now: dependencies.now,
   });
+  const workflowStart = await startSelectedThreadWorkflows({
+    repository,
+    workflow: env.REDDIT_THREAD_WORKFLOW,
+    now: dependencies.now,
+  });
+  return { delivery, workflowStart };
 }

@@ -73,6 +73,7 @@ export interface ThreadRecord {
   selectionStatus: SelectionStatus;
   workflowId?: string;
   workflowAssignedAt?: string;
+  workflowStartedAt?: string;
   firstSeenAt: string;
   lastSeenAt: string;
 }
@@ -370,6 +371,65 @@ export class RedditRepository {
     };
   }
 
+  async markWorkflowStarted(
+    threadExternalId: string,
+    workflowId: string,
+    startedAt: string,
+  ): Promise<ThreadRecord> {
+    validateFullname(threadExternalId, 'thread_external_id', 't3_');
+    validateOpaqueId(workflowId, 'workflow_id', 128);
+    const normalizedStartedAt = normalizeTimestamp(
+      startedAt,
+      'workflow_started_at',
+    );
+    const thread = await this.getThread(threadExternalId);
+    if (thread === null) throw new StorageInvariantError('missing_thread');
+    if (thread.workflowId !== workflowId) {
+      throw new StorageInvariantError('workflow_identity_mismatch');
+    }
+    if (thread.workflowStartedAt !== undefined) return thread;
+
+    await safeRun(
+      this.database
+        .prepare(
+          `UPDATE reddit_threads
+           SET workflow_started_at = ?
+           WHERE thread_external_id = ? AND workflow_id = ?
+             AND workflow_started_at IS NULL`,
+        )
+        .bind(normalizedStartedAt, threadExternalId, workflowId),
+    );
+    const stored = await this.getThread(threadExternalId);
+    if (stored?.workflowStartedAt === undefined) {
+      throw new StorageInvariantError('workflow_start_write_failed');
+    }
+    return stored;
+  }
+
+  async listSelectedThreadsNeedingWorkflow(
+    limit = 100,
+  ): Promise<ThreadRecord[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new StorageInvariantError('workflow_start_limit');
+    }
+    let rows: Record<string, unknown>[];
+    try {
+      const result = await this.database
+        .prepare(
+          `SELECT * FROM reddit_threads
+           WHERE selection_status = 'selected' AND workflow_started_at IS NULL
+           ORDER BY first_seen_at, thread_external_id
+           LIMIT ?`,
+        )
+        .bind(limit)
+        .all<Record<string, unknown>>();
+      rows = result.results;
+    } catch {
+      throw new StorageInvariantError('read_failed');
+    }
+    return rows.map(parseThreadRow);
+  }
+
   async recordDeliveryAcknowledgement(
     key: SourceVersionKey,
     responseInput: SiteAcceptedResponse,
@@ -493,10 +553,14 @@ export class RedditRepository {
   async listReadyDeliveries(
     readyAt: string,
     limit = 100,
+    threadExternalId?: string,
   ): Promise<PendingDeliveryRecord[]> {
     const normalizedReadyAt = normalizeTimestamp(readyAt, 'delivery_ready_at');
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new StorageInvariantError('pending_delivery_limit');
+    }
+    if (threadExternalId !== undefined) {
+      validateFullname(threadExternalId, 'thread_external_id', 't3_');
     }
     let rows: Record<string, unknown>[];
     try {
@@ -507,10 +571,16 @@ export class RedditRepository {
            FROM reddit_source_objects
            WHERE delivery_status = 'pending' AND delivery_terminal = 0
              AND (delivery_retry_at IS NULL OR delivery_retry_at <= ?)
+             AND (? IS NULL OR thread_external_id = ?)
            ORDER BY first_seen_at, source_external_id, content_version
            LIMIT ?`,
         )
-        .bind(normalizedReadyAt, limit)
+        .bind(
+          normalizedReadyAt,
+          threadExternalId ?? null,
+          threadExternalId ?? null,
+          limit,
+        )
         .all<Record<string, unknown>>();
       rows = result.results;
     } catch {
@@ -519,9 +589,15 @@ export class RedditRepository {
     return rows.map(parsePendingDeliveryRow);
   }
 
-  async listPendingEvaluations(limit = 100): Promise<StoredSourceVersion[]> {
+  async listPendingEvaluations(
+    limit = 100,
+    threadExternalId?: string,
+  ): Promise<StoredSourceVersion[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new StorageInvariantError('pending_evaluation_limit');
+    }
+    if (threadExternalId !== undefined) {
+      validateFullname(threadExternalId, 'thread_external_id', 't3_');
     }
     let rows: Record<string, unknown>[];
     try {
@@ -529,10 +605,11 @@ export class RedditRepository {
         .prepare(
           `SELECT * FROM reddit_source_objects
            WHERE evaluation_status = 'pending'
+             AND (? IS NULL OR thread_external_id = ?)
            ORDER BY first_seen_at, source_external_id, content_version
            LIMIT ?`,
         )
-        .bind(limit)
+        .bind(threadExternalId ?? null, threadExternalId ?? null, limit)
         .all<Record<string, unknown>>();
       rows = result.results;
     } catch {
@@ -816,9 +893,14 @@ function parseThreadRow(row: Record<string, unknown>): ThreadRecord {
       row,
       'workflow_assigned_at',
     );
+    const workflowStartedAtValue = rowNullableString(
+      row,
+      'workflow_started_at',
+    );
     if ((workflowId === null) !== (workflowAssignedAtValue === null)) {
       corruptRow();
     }
+    if (workflowStartedAtValue !== null && workflowId === null) corruptRow();
     if (workflowId !== null) validateOpaqueId(workflowId, 'workflow_id', 128);
     return {
       threadExternalId,
@@ -831,6 +913,14 @@ function parseThreadRow(row: Record<string, unknown>): ThreadRecord {
             workflowAssignedAt: normalizeTimestamp(
               workflowAssignedAtValue,
               'workflow_assigned_at',
+            ),
+          }),
+      ...(workflowStartedAtValue === null
+        ? {}
+        : {
+            workflowStartedAt: normalizeTimestamp(
+              workflowStartedAtValue,
+              'workflow_started_at',
             ),
           }),
       firstSeenAt: rowTimestamp(row, 'first_seen_at'),
