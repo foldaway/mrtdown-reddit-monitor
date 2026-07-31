@@ -32,6 +32,10 @@ export interface RedditAccessState {
   rateLimitResetAt: string | null;
 }
 
+export type RedditRequestReservation =
+  | { kind: 'reserved'; state: RedditAccessState }
+  | { kind: 'unavailable'; state: RedditAccessState };
+
 export class RedditAccessStorageError extends Error {
   constructor(readonly code: 'corrupt_row' | 'read_failed' | 'write_failed') {
     super(`Reddit access storage failed: ${code}`);
@@ -65,6 +69,53 @@ export class RedditAccessRepository {
     return row === null ? null : parseState(row);
   }
 
+  /**
+   * Atomically records an outbound RSS attempt before it starts. The existing
+   * `blocked_until` field is the single durable gate for both the fixed
+   * cadence and any longer Reddit-directed backoff.
+   */
+  async reserveAttempt(
+    attemptedAt: string,
+    blockedUntil: string,
+  ): Promise<RedditRequestReservation> {
+    const normalizedAttemptedAt = normalizeTimestamp(attemptedAt);
+    const normalizedBlockedUntil = normalizeTimestamp(blockedUntil);
+    if (normalizedBlockedUntil <= normalizedAttemptedAt) {
+      throw new TypeError('Reddit request reservation must be in the future');
+    }
+
+    let row: Record<string, unknown> | null;
+    try {
+      row = await this.database
+        .prepare(
+          `INSERT INTO reddit_transport_state (
+             transport, blocked_until, consecutive_rate_limits,
+             consecutive_shape_failures, last_attempt_at
+           ) VALUES (?, ?, 0, 0, ?)
+           ON CONFLICT(transport) DO UPDATE SET
+             blocked_until = excluded.blocked_until,
+             last_attempt_at = excluded.last_attempt_at
+           WHERE reddit_transport_state.disabled_reason IS NULL
+             AND (
+               reddit_transport_state.blocked_until IS NULL
+               OR reddit_transport_state.blocked_until <= excluded.last_attempt_at
+             )
+           RETURNING blocked_until, disabled_reason, consecutive_rate_limits,
+                     consecutive_shape_failures, last_attempt_at, last_success_at,
+                     rate_limit_remaining, rate_limit_reset_at`,
+        )
+        .bind(TRANSPORT, normalizedBlockedUntil, normalizedAttemptedAt)
+        .first<Record<string, unknown>>();
+    } catch {
+      throw new RedditAccessStorageError('write_failed');
+    }
+    if (row !== null) return { kind: 'reserved', state: parseState(row) };
+
+    const state = await this.getState();
+    if (state === null) throw new RedditAccessStorageError('write_failed');
+    return { kind: 'unavailable', state };
+  }
+
   async recordSuccess(
     attemptedAt: string,
     observation: RedditAccessObservation,
@@ -79,7 +130,7 @@ export class RedditAccessRepository {
              rate_limit_remaining, rate_limit_reset_at
            ) VALUES (?, ?, 0, 0, ?, ?, ?, ?)
            ON CONFLICT(transport) DO UPDATE SET
-             blocked_until = excluded.blocked_until,
+             blocked_until = ${laterBlockedUntilSql()},
              consecutive_rate_limits = 0,
              consecutive_shape_failures = 0,
              last_attempt_at = excluded.last_attempt_at,

@@ -100,27 +100,41 @@ describe('scheduled Reddit discovery runtime', () => {
         headers: { 'content-type': 'application/atom+xml' },
       });
     });
-    const dependencies = { fetch, now: () => NOW, log };
+    let currentTime = NOW;
+    const dependencies = { fetch, now: () => currentTime, log };
 
     await expect(
       runScheduledDiscovery(runtimeEnv(), dependencies),
     ).resolves.toMatchObject({
       outcome: 'completed',
+      discovery: { action: 'searched', queuedCandidateCount: 1 },
+    });
+    await expect(
+      runScheduledDiscovery(runtimeEnv(), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'paused',
+      reason: 'backoff',
+      resumeAt: '2026-07-19T01:01:00.000Z',
+    });
+    currentTime = new Date(NOW.valueOf() + 61_000);
+    await expect(
+      runScheduledDiscovery(runtimeEnv(), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'completed',
       discovery: {
+        action: 'hydrated',
         insertedSourceVersionCount: 1,
         fetchedConversationCount: 1,
       },
       evaluation: { pendingCount: 1, reportCount: 1 },
       delivery: { readyCount: 1, acknowledgedCount: 1 },
     });
+    currentTime = new Date(NOW.valueOf() + 122_000);
     await expect(
       runScheduledDiscovery(runtimeEnv(), dependencies),
     ).resolves.toMatchObject({
       outcome: 'completed',
-      discovery: {
-        existingThreadCount: 1,
-        fetchedConversationCount: 0,
-      },
+      discovery: { action: 'searched', existingThreadCount: 1 },
     });
     expect(fetch).toHaveBeenCalledTimes(5);
     expect(log).toHaveBeenLastCalledWith(
@@ -128,7 +142,7 @@ describe('scheduled Reddit discovery runtime', () => {
         event: 'reddit_discovery_completed',
         existingThreadCount: 1,
         metrics: {
-          discoveryFreshnessSeconds: 0,
+          discoveryFreshnessSeconds: 61,
           activeWorkflowCount: 1,
           sourceEvaluationStatusCounts: {
             pending: 0,
@@ -138,7 +152,7 @@ describe('scheduled Reddit discovery runtime', () => {
           },
           pendingDeliveryCount: 0,
           oldestPendingDeliveryAgeSeconds: null,
-          redditAccess: { state: 'ready', rateLimitRemaining: null },
+          redditAccess: { state: 'backoff', rateLimitRemaining: null },
         },
       }),
     );
@@ -221,8 +235,16 @@ describe('scheduled Reddit discovery runtime', () => {
         },
       );
     });
-    const dependencies = { fetch, now: () => NOW, log: vi.fn() };
+    let currentTime = NOW;
+    const dependencies = { fetch, now: () => currentTime, log: vi.fn() };
 
+    await expect(
+      runScheduledDiscovery(runtimeEnv(), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      discovery: { action: 'searched', queuedCandidateCount: 1 },
+    });
+    currentTime = new Date(NOW.valueOf() + 61_000);
     await expect(
       runScheduledDiscovery(runtimeEnv(), dependencies),
     ).resolves.toMatchObject({
@@ -230,6 +252,7 @@ describe('scheduled Reddit discovery runtime', () => {
       delivery: { readyCount: 1, retryableFailureCount: 1 },
     });
     redditRateLimited = true;
+    currentTime = new Date(NOW.valueOf() + 122_000);
     await expect(
       runScheduledDiscovery(runtimeEnv(), dependencies),
     ).resolves.toMatchObject({
@@ -264,12 +287,17 @@ describe('scheduled Reddit discovery runtime', () => {
       );
     });
 
+    let currentTime = NOW;
+    const dependencies = { fetch, now: () => currentTime, log };
     await expect(
-      runScheduledDiscovery(runtimeEnv('{invalid'), {
-        fetch,
-        now: () => NOW,
-        log,
-      }),
+      runScheduledDiscovery(runtimeEnv('{invalid'), dependencies),
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      discovery: { action: 'searched', queuedCandidateCount: 1 },
+    });
+    currentTime = new Date(NOW.valueOf() + 61_000);
+    await expect(
+      runScheduledDiscovery(runtimeEnv('{invalid'), dependencies),
     ).rejects.toEqual(new SemanticParserError('invalid_response'));
     expect(log).toHaveBeenLastCalledWith(
       expect.objectContaining({

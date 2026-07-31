@@ -80,6 +80,44 @@ describe('durable Reddit access policy', () => {
     });
   });
 
+  it('atomically reserves one shared RSS request per minute', async () => {
+    const fetchCandidates = vi.fn(async () => discoveryResult());
+    const repository = new RedditAccessRepository(testEnv.DB);
+    const first = new BackoffAwarePublicShadowRedditTransport(
+      { fetchCandidates },
+      { fetchConversation: vi.fn() },
+      repository,
+      () => NOW,
+    );
+    const second = new BackoffAwarePublicShadowRedditTransport(
+      { fetchCandidates },
+      { fetchConversation: vi.fn() },
+      repository,
+      () => NOW,
+    );
+
+    const results = await Promise.allSettled([
+      first.fetchCandidates('singapore', 'synthetic rail'),
+      second.fetchCandidates('askSingapore', 'synthetic rail'),
+    ]);
+
+    expect(fetchCandidates).toHaveBeenCalledTimes(1);
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    const rejected = results.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    expect(rejected?.reason).toMatchObject({
+      reason: 'backoff',
+      resumeAt: '2026-07-19T01:01:00.000Z',
+    });
+    await expect(repository.getState()).resolves.toMatchObject({
+      blockedUntil: '2026-07-19T01:01:00.000Z',
+      lastAttemptAt: NOW.toISOString(),
+    });
+  });
+
   it('disables public-shadow access after two consecutive rate limits', async () => {
     let currentTime = NOW;
     const fetchCandidates = vi.fn(async () => {
@@ -119,6 +157,7 @@ describe('durable Reddit access policy', () => {
   });
 
   it('disables access after three consecutive malformed response shapes', async () => {
+    let currentTime = NOW;
     const fetchCandidates = vi.fn(async () => {
       throw new RedditTransportError('malformed_response', metadata());
     });
@@ -127,13 +166,14 @@ describe('durable Reddit access policy', () => {
       { fetchCandidates },
       { fetchConversation: vi.fn() },
       repository,
-      () => NOW,
+      () => currentTime,
     );
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await expect(
         transport.fetchCandidates('singapore', 'synthetic rail'),
       ).rejects.toMatchObject({ category: 'malformed_response' });
+      currentTime = new Date(currentTime.valueOf() + 60_000);
     }
     await expect(
       transport.fetchCandidates('singapore', 'synthetic rail'),

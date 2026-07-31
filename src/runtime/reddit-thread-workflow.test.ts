@@ -16,6 +16,7 @@ import { syntheticRedditConversationFeed } from '../../test/fixtures/reddit-conv
 import { parseRedditConversationAtom } from '../contracts/reddit-conversation-atom.js';
 
 const NOW = new Date('2026-07-21T00:00:00.000Z');
+const RETRY_AT = new Date(Date.now() + 60_000).toISOString();
 const testEnv = env as typeof env & { TEST_MIGRATIONS: D1Migration[] };
 
 describe('Reddit thread Workflow runtime', () => {
@@ -76,9 +77,19 @@ describe('Reddit thread Workflow runtime', () => {
       for (const offsetMinutes of THREAD_WORKFLOW_POLL_OFFSETS_MINUTES) {
         await modifier.mockStepResult(
           { name: `check +${offsetMinutes}m` },
-          { outcome: 'completed' },
+          offsetMinutes === 10
+            ? {
+                outcome: 'paused',
+                resumeAt: RETRY_AT,
+                disabled: false,
+              }
+            : { outcome: 'completed' },
         );
       }
+      await modifier.mockStepResult(
+        { name: 'retry +10m #1' },
+        { outcome: 'completed' },
+      );
     });
 
     await testEnv.REDDIT_THREAD_WORKFLOW.create({
@@ -93,8 +104,19 @@ describe('Reddit thread Workflow runtime', () => {
     for (const offsetMinutes of THREAD_WORKFLOW_POLL_OFFSETS_MINUTES) {
       await expect(
         instance.waitForStepResult({ name: `check +${offsetMinutes}m` }),
-      ).resolves.toEqual({ outcome: 'completed' });
+      ).resolves.toEqual(
+        offsetMinutes === 10
+          ? {
+              outcome: 'paused',
+              resumeAt: RETRY_AT,
+              disabled: false,
+            }
+          : { outcome: 'completed' },
+      );
     }
+    await expect(
+      instance.waitForStepResult({ name: 'retry +10m #1' }),
+    ).resolves.toEqual({ outcome: 'completed' });
     expect(
       (await repository.getThread(root.threadExternalId))?.workflowCompletedAt,
     ).toEqual(expect.any(String));

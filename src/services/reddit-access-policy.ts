@@ -2,6 +2,7 @@ import type {
   RedditAccessFailureKind,
   RedditAccessObservation,
   RedditAccessState,
+  RedditRequestReservation,
 } from '../storage/reddit-access-repository.js';
 import {
   type PublicConversationFetchResult,
@@ -12,9 +13,13 @@ import {
 
 const DEFAULT_RATE_LIMIT_BACKOFF_MS = 15 * 60 * 1_000;
 const EMPTY_QUOTA_BACKOFF_MS = 5 * 60 * 1_000;
+export const PUBLIC_SHADOW_RSS_CADENCE_MS = 60_000;
 
 interface RedditAccessStateRepository {
-  getState(): Promise<RedditAccessState | null>;
+  reserveAttempt(
+    attemptedAt: string,
+    blockedUntil: string,
+  ): Promise<RedditRequestReservation>;
   recordSuccess(
     attemptedAt: string,
     observation: RedditAccessObservation,
@@ -86,7 +91,13 @@ export class BackoffAwarePublicShadowRedditTransport
     },
   >(request: () => Promise<Result>): Promise<Result> {
     const attemptedAt = readCurrentTime(this.now);
-    await assertAccessAvailable(this.accessRepository, attemptedAt);
+    const reservation = await this.accessRepository.reserveAttempt(
+      attemptedAt.toISOString(),
+      addMilliseconds(attemptedAt, PUBLIC_SHADOW_RSS_CADENCE_MS),
+    );
+    if (reservation.kind === 'unavailable') {
+      throw pausedError(reservation.state, attemptedAt);
+    }
 
     try {
       const result = await request();
@@ -111,21 +122,20 @@ export class BackoffAwarePublicShadowRedditTransport
   }
 }
 
-async function assertAccessAvailable(
-  repository: RedditAccessStateRepository,
+function pausedError(
+  state: RedditAccessState,
   now: Date,
-): Promise<void> {
-  const state = await repository.getState();
-  if (state?.disabledReason !== null && state?.disabledReason !== undefined) {
-    throw new RedditAccessPausedError('disabled', null);
+): RedditAccessPausedError {
+  if (state.disabledReason !== null) {
+    return new RedditAccessPausedError('disabled', null);
   }
   if (
-    state?.blockedUntil !== null &&
-    state?.blockedUntil !== undefined &&
+    state.blockedUntil !== null &&
     Date.parse(state.blockedUntil) > now.valueOf()
   ) {
-    throw new RedditAccessPausedError('backoff', state.blockedUntil);
+    return new RedditAccessPausedError('backoff', state.blockedUntil);
   }
+  throw new TypeError('Reddit request reservation became unavailable');
 }
 
 function observationFromMetadata(
