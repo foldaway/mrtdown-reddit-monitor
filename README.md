@@ -211,6 +211,7 @@ one-minute RSS cadence, and stop on `401`, `403`, repeated `429`, unexpected
 content types, or sustained response shape failures. Deferred candidates and
 paused Workflow checks resume later instead of being discarded. Repeatedly
 missing candidate feeds are quarantined after three `404` or `410` responses;
+an authoritative root/subreddit mismatch is quarantined immediately;
 selected-thread Workflow checks continue their fixed schedule rather than
 retrying those permanent misses forever. Switch to OAuth when credentials become
 available without changing stored source identities or external report IDs.

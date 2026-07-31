@@ -115,6 +115,8 @@ it; do not pre-build a generic event-processing framework.
 - A candidate receiving three permanent missing (`404` or `410`) conversation
   responses is quarantined so it cannot block later discovery. A selected
   thread receiving those statuses advances to its next fixed Workflow check.
+- A hydrated root that fails its queued identity or subreddit boundary check is
+  quarantined immediately instead of being retried indefinitely.
 
 D1 uniqueness constraints and short transactions should enforce these rules.
 Do not add claims, lifecycle events, support aggregation, generalized leases,

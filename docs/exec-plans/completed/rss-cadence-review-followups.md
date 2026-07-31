@@ -27,18 +27,22 @@ Keep RSS as the transport, retain bounded retention of candidate identities only
 - 2026-07-31: Added a D1-backed next-subreddit cursor. It advances after a successful search fetch, so queued hydration and other RSS work cannot bias community coverage.
 - 2026-07-31: Added failure-aware candidate ordering and quarantine after three permanent (`404` or `410`) conversation-feed failures. A failed candidate moves behind healthy queued candidates before it is retried.
 - 2026-07-31: Added the normalized upstream status to Workflow transport outcomes. `404` and `410` no longer cause an in-step retry loop; the Workflow advances to its next scheduled check.
+- 2026-07-31: Follow-up review found that an authoritative root/subreddit mismatch could still leave a candidate at the queue head. Such candidates now quarantine immediately after the boundary check fails.
 
 ## Decisions
 
 - Advance the durable subreddit cursor after a successful search rather than before it, so a temporary search failure retries the same community.
 - Treat only `404` and `410` as permanent missing conversation statuses. Other unexpected statuses retain the existing transient retry behavior.
 - Quarantine after three permanent failures, retaining identity-only operational state without storing Reddit source content.
+- A root/subreddit identity mismatch is terminal for that candidate because the authoritative feed contradicts the validated search identity; quarantine it immediately.
 
 ## Validation
 
-- 2026-07-31: `npm run check` passed: formatting, linting, type checks, 27 deterministic test files / 98 tests, and documentation validation.
+- 2026-07-31: `npm run check` passed after the identity-mismatch quarantine
+  follow-up: formatting, linting, type checks, 27 deterministic test files /
+  100 tests, and documentation validation.
 - 2026-07-31: `git diff --check` passed.
 
 ## Follow-ups
 
-- Push the follow-up commit to PR #2. Do not resolve its review threads until explicitly requested.
+- Push the identity-mismatch follow-up to PR #2. Do not resolve its review thread until explicitly requested.

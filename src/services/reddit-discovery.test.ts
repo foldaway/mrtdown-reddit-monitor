@@ -160,6 +160,7 @@ describe('Reddit discovery service', () => {
           }),
           remove: vi.fn(),
           recordPermanentHydrationFailure,
+          quarantine: vi.fn(),
         },
         schedule: {
           getNextSubreddit: vi.fn(),
@@ -177,5 +178,38 @@ describe('Reddit discovery service', () => {
       't3_synthetic1',
       NOW.toISOString(),
     );
+  });
+
+  it('quarantines a mismatched candidate instead of pinning scheduled discovery', async () => {
+    const quarantine = vi.fn();
+
+    await expect(
+      runScheduledRedditDiscovery({
+        subreddits: ['syntheticTransit'],
+        query: 'mrt OR train',
+        discoveryTransport: { fetchCandidates: vi.fn() },
+        conversationTransport: { fetchConversation: conversationResult },
+        candidateQueue: {
+          enqueue: vi.fn(),
+          getOldest: async () => ({
+            threadExternalId: 't3_synthetic1',
+            subreddit: 'differentSubreddit',
+          }),
+          remove: vi.fn(),
+          recordPermanentHydrationFailure: vi.fn(),
+          quarantine,
+        },
+        schedule: {
+          getNextSubreddit: vi.fn(),
+          advanceAfterSearch: vi.fn(),
+        },
+        repository: new RedditRepository(env.DB),
+        now: () => NOW,
+      }),
+    ).resolves.toMatchObject({
+      action: 'quarantined_mismatched_candidate',
+      quarantinedCandidateCount: 1,
+    });
+    expect(quarantine).toHaveBeenCalledWith('t3_synthetic1', NOW.toISOString());
   });
 });

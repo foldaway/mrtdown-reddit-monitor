@@ -45,6 +45,7 @@ interface DiscoveryCandidateQueue {
     threadExternalId: string,
     failedAt: string,
   ): Promise<{ quarantined: boolean }>;
+  quarantine(threadExternalId: string, quarantinedAt: string): Promise<void>;
 }
 
 interface DiscoverySchedule {
@@ -91,7 +92,8 @@ export interface ScheduledRedditDiscoveryResult {
     | 'searched'
     | 'hydrated'
     | 'discarded_stale_candidate'
-    | 'deferred_permanent_hydration_failure';
+    | 'deferred_permanent_hydration_failure'
+    | 'quarantined_mismatched_candidate';
   feedCount: number;
   candidateCount: number;
   rejectedFeedEntryCount: number;
@@ -230,7 +232,15 @@ export async function runScheduledRedditDiscovery(
     if (
       !matchesCandidate(root, candidate.threadExternalId, candidate.subreddit)
     ) {
-      throw new RedditDiscoveryError('candidate_mismatch');
+      await options.candidateQueue.quarantine(
+        candidate.threadExternalId,
+        seenAt,
+      );
+      return {
+        ...emptyScheduledResult('quarantined_mismatched_candidate'),
+        candidateCount: 1,
+        quarantinedCandidateCount: 1,
+      };
     }
     const stored = await options.repository.storeSourceVersion(
       root,

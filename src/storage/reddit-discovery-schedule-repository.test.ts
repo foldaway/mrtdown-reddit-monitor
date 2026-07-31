@@ -86,4 +86,25 @@ describe('durable discovery scheduling', () => {
       hydration_status: 'quarantined',
     });
   });
+
+  it('immediately quarantines a candidate that fails identity verification', async () => {
+    const queue = new RedditDiscoveryCandidateRepository(testEnv.DB);
+    await queue.enqueue(CANDIDATE, '2026-08-01T00:00:00.000Z');
+
+    await queue.quarantine('t3_synthetic1', '2026-08-01T00:01:00.000Z');
+
+    await expect(queue.getOldest()).resolves.toBeNull();
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT hydration_failure_count, hydration_status, last_hydration_failure_at
+         FROM reddit_discovery_candidates WHERE thread_external_id = ?`,
+      )
+        .bind('t3_synthetic1')
+        .first(),
+    ).resolves.toEqual({
+      hydration_failure_count: 3,
+      hydration_status: 'quarantined',
+      last_hydration_failure_at: '2026-08-01T00:01:00.000Z',
+    });
+  });
 });

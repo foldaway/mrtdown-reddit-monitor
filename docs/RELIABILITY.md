@@ -27,8 +27,9 @@ Last verified: 2026-07-31
   wait and retry at the recorded resume time.
 - Scheduled subreddit rotation is durable and advances only after a successful
   search, so deferred hydration does not bias coverage. A candidate with three
-  permanent missing responses is quarantined; `404` and `410` thread checks do
-  not retry within a Workflow step.
+permanent missing responses is quarantined; `404` and `410` thread checks do
+not retry within a Workflow step. A hydrated root/subreddit mismatch is
+quarantined immediately.
 - Semantic inference or output-validation failure leaves source evaluation
   pending so a later invocation can retry without changing its content version.
 - The site's current reference catalog is cached in D1 for its advertised

@@ -125,6 +125,36 @@ export class RedditDiscoveryCandidateRepository {
       quarantined: parseHydrationStatus(row.hydration_status) === 'quarantined',
     };
   }
+
+  async quarantine(
+    threadExternalId: string,
+    quarantinedAt: string,
+  ): Promise<void> {
+    validateThreadExternalId(threadExternalId);
+    const timestamp = normalizeTimestamp(quarantinedAt);
+    try {
+      await this.database
+        .prepare(
+          `UPDATE reddit_discovery_candidates
+           SET hydration_failure_count = CASE
+                 WHEN hydration_failure_count < ? THEN ?
+                 ELSE hydration_failure_count
+               END,
+               hydration_status = 'quarantined',
+               last_hydration_failure_at = ?
+           WHERE thread_external_id = ?`,
+        )
+        .bind(
+          MAXIMUM_HYDRATION_FAILURES,
+          MAXIMUM_HYDRATION_FAILURES,
+          timestamp,
+          threadExternalId,
+        )
+        .run();
+    } catch {
+      throw new RedditDiscoveryCandidateStorageError('write_failed');
+    }
+  }
 }
 
 function parseCandidate(
