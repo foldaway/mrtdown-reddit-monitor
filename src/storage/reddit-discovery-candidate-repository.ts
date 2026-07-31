@@ -31,23 +31,16 @@ export class RedditDiscoveryCandidateRepository {
   async enqueue(
     candidate: RedditDiscoveryCandidate,
     discoveredAt: string,
-  ): Promise<void> {
+  ): Promise<{ queued: boolean }> {
     validateCandidate(candidate);
     const timestamp = normalizeTimestamp(discoveredAt);
     try {
-      await this.database
+      const inserted = await this.database
         .prepare(
           `INSERT INTO reddit_discovery_candidates (
              thread_external_id, subreddit, first_discovered_at, last_discovered_at
            ) VALUES (?, ?, ?, ?)
-           ON CONFLICT(thread_external_id) DO UPDATE SET
-             last_discovered_at = CASE
-               WHEN reddit_discovery_candidates.last_discovered_at < excluded.last_discovered_at
-                 THEN excluded.last_discovered_at
-               ELSE reddit_discovery_candidates.last_discovered_at
-             END,
-             subreddit = excluded.subreddit
-           WHERE reddit_discovery_candidates.subreddit = excluded.subreddit`,
+           ON CONFLICT(thread_external_id) DO NOTHING`,
         )
         .bind(
           candidate.threadExternalId,
@@ -56,6 +49,27 @@ export class RedditDiscoveryCandidateRepository {
           timestamp,
         )
         .run();
+      if (inserted.meta.changes === 1) return { queued: true };
+
+      await this.database
+        .prepare(
+          `UPDATE reddit_discovery_candidates
+           SET last_discovered_at = CASE
+             WHEN last_discovered_at < ? THEN ?
+             ELSE last_discovered_at
+           END
+           WHERE thread_external_id = ?
+             AND subreddit = ?
+             AND hydration_status = 'pending'`,
+        )
+        .bind(
+          timestamp,
+          timestamp,
+          candidate.threadExternalId,
+          candidate.subreddit,
+        )
+        .run();
+      return { queued: false };
     } catch {
       throw new RedditDiscoveryCandidateStorageError('write_failed');
     }

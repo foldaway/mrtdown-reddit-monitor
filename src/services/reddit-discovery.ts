@@ -35,7 +35,7 @@ interface DiscoveryCandidateQueue {
   enqueue(
     candidate: RedditDiscoveryCandidate,
     discoveredAt: string,
-  ): Promise<void>;
+  ): Promise<{ queued: boolean }>;
   getOldest(): Promise<{
     threadExternalId: string;
     subreddit: string;
@@ -277,8 +277,11 @@ export async function runScheduledRedditDiscovery(
       result.existingThreadCount += 1;
       continue;
     }
-    await options.candidateQueue.enqueue(feedCandidate, seenAt);
-    result.queuedCandidateCount += 1;
+    const enqueued = await options.candidateQueue.enqueue(
+      feedCandidate,
+      seenAt,
+    );
+    if (enqueued.queued) result.queuedCandidateCount += 1;
   }
   await options.schedule.advanceAfterSearch(subreddit, options.subreddits);
   return result;

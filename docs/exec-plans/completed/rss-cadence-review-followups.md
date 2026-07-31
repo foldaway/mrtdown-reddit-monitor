@@ -28,6 +28,7 @@ Keep RSS as the transport, retain bounded retention of candidate identities only
 - 2026-07-31: Added failure-aware candidate ordering and quarantine after three permanent (`404` or `410`) conversation-feed failures. A failed candidate moves behind healthy queued candidates before it is retried.
 - 2026-07-31: Added the normalized upstream status to Workflow transport outcomes. `404` and `410` no longer cause an in-step retry loop; the Workflow advances to its next scheduled check.
 - 2026-07-31: Follow-up review found that an authoritative root/subreddit mismatch could still leave a candidate at the queue head. Such candidates now quarantine immediately after the boundary check fails.
+- 2026-07-31: Follow-up review found that re-seen quarantined candidates could inflate queued-work metrics. Candidate enqueue now reports whether it created a new pending row, and only that outcome increments the metric.
 
 ## Decisions
 
@@ -35,12 +36,16 @@ Keep RSS as the transport, retain bounded retention of candidate identities only
 - Treat only `404` and `410` as permanent missing conversation statuses. Other unexpected statuses retain the existing transient retry behavior.
 - Quarantine after three permanent failures, retaining identity-only operational state without storing Reddit source content.
 - A root/subreddit identity mismatch is terminal for that candidate because the authoritative feed contradicts the validated search identity; quarantine it immediately.
+- Re-seen pending or quarantined identities are not new queued work; metrics count only a newly inserted pending candidate.
 
 ## Validation
 
 - 2026-07-31: `npm run check` passed after the identity-mismatch quarantine
   follow-up: formatting, linting, type checks, 27 deterministic test files /
   100 tests, and documentation validation.
+- 2026-07-31: `npm run check` passed after the queued-candidate metric
+  follow-up: formatting, linting, type checks, 27 deterministic test files /
+  101 tests, and documentation validation.
 - 2026-07-31: `git diff --check` passed.
 
 ## Follow-ups

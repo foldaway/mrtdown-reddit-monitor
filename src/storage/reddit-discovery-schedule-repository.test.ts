@@ -89,7 +89,9 @@ describe('durable discovery scheduling', () => {
 
   it('immediately quarantines a candidate that fails identity verification', async () => {
     const queue = new RedditDiscoveryCandidateRepository(testEnv.DB);
-    await queue.enqueue(CANDIDATE, '2026-08-01T00:00:00.000Z');
+    await expect(
+      queue.enqueue(CANDIDATE, '2026-08-01T00:00:00.000Z'),
+    ).resolves.toEqual({ queued: true });
 
     await queue.quarantine('t3_synthetic1', '2026-08-01T00:01:00.000Z');
 
@@ -106,5 +108,8 @@ describe('durable discovery scheduling', () => {
       hydration_status: 'quarantined',
       last_hydration_failure_at: '2026-08-01T00:01:00.000Z',
     });
+    await expect(
+      queue.enqueue(CANDIDATE, '2026-08-01T00:02:00.000Z'),
+    ).resolves.toEqual({ queued: false });
   });
 });

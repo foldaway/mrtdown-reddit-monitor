@@ -212,4 +212,32 @@ describe('Reddit discovery service', () => {
     });
     expect(quarantine).toHaveBeenCalledWith('t3_synthetic1', NOW.toISOString());
   });
+
+  it('does not count a re-seen quarantined candidate as queued', async () => {
+    await expect(
+      runScheduledRedditDiscovery({
+        subreddits: ['syntheticTransit'],
+        query: 'mrt OR train',
+        discoveryTransport: { fetchCandidates: async () => discoveryResult() },
+        conversationTransport: { fetchConversation: vi.fn() },
+        candidateQueue: {
+          enqueue: async () => ({ queued: false }),
+          getOldest: async () => null,
+          remove: vi.fn(),
+          recordPermanentHydrationFailure: vi.fn(),
+          quarantine: vi.fn(),
+        },
+        schedule: {
+          getNextSubreddit: async () => 'syntheticTransit',
+          advanceAfterSearch: vi.fn(),
+        },
+        repository: new RedditRepository(env.DB),
+        now: () => NOW,
+      }),
+    ).resolves.toMatchObject({
+      action: 'searched',
+      candidateCount: 1,
+      queuedCandidateCount: 0,
+    });
+  });
 });
