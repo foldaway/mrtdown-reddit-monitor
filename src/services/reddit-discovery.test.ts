@@ -6,7 +6,9 @@ import { parseRedditConversationAtom } from '../contracts/reddit-conversation-at
 import {
   RedditDiscoveryError,
   runRedditDiscovery,
+  runScheduledRedditDiscovery,
 } from './reddit-discovery.js';
+import { RedditTransportError } from './public-shadow-reddit-transport.js';
 import { RedditRepository } from '../storage/reddit-repository.js';
 import { syntheticRedditConversationFeed } from '../../test/fixtures/reddit-conversation-feed.js';
 
@@ -124,5 +126,118 @@ describe('Reddit discovery service', () => {
       }),
     ).rejects.toThrowError(new RedditDiscoveryError('candidate_mismatch'));
     await expect(repository.getThread('t3_different')).resolves.toBeNull();
+  });
+
+  it('defers a permanently missing candidate without blocking later discovery work', async () => {
+    const recordPermanentHydrationFailure = vi.fn(async () => ({
+      quarantined: false,
+    }));
+
+    await expect(
+      runScheduledRedditDiscovery({
+        subreddits: ['syntheticTransit'],
+        query: 'mrt OR train',
+        discoveryTransport: { fetchCandidates: vi.fn() },
+        conversationTransport: {
+          fetchConversation: async () => {
+            throw new RedditTransportError('unexpected_status', {
+              status: 404,
+              contentType: null,
+              responseBytes: 0,
+              etag: null,
+              lastModified: null,
+              retryAfterAt: null,
+              rateLimitRemaining: null,
+              rateLimitResetAt: null,
+            });
+          },
+        },
+        candidateQueue: {
+          enqueue: vi.fn(),
+          getOldest: async () => ({
+            threadExternalId: 't3_synthetic1',
+            subreddit: 'syntheticTransit',
+          }),
+          remove: vi.fn(),
+          recordPermanentHydrationFailure,
+          quarantine: vi.fn(),
+        },
+        schedule: {
+          getNextSubreddit: vi.fn(),
+          advanceAfterSearch: vi.fn(),
+        },
+        repository: new RedditRepository(env.DB),
+        now: () => NOW,
+      }),
+    ).resolves.toMatchObject({
+      action: 'deferred_permanent_hydration_failure',
+      permanentHydrationFailureCount: 1,
+      quarantinedCandidateCount: 0,
+    });
+    expect(recordPermanentHydrationFailure).toHaveBeenCalledWith(
+      't3_synthetic1',
+      NOW.toISOString(),
+    );
+  });
+
+  it('quarantines a mismatched candidate instead of pinning scheduled discovery', async () => {
+    const quarantine = vi.fn();
+
+    await expect(
+      runScheduledRedditDiscovery({
+        subreddits: ['syntheticTransit'],
+        query: 'mrt OR train',
+        discoveryTransport: { fetchCandidates: vi.fn() },
+        conversationTransport: { fetchConversation: conversationResult },
+        candidateQueue: {
+          enqueue: vi.fn(),
+          getOldest: async () => ({
+            threadExternalId: 't3_synthetic1',
+            subreddit: 'differentSubreddit',
+          }),
+          remove: vi.fn(),
+          recordPermanentHydrationFailure: vi.fn(),
+          quarantine,
+        },
+        schedule: {
+          getNextSubreddit: vi.fn(),
+          advanceAfterSearch: vi.fn(),
+        },
+        repository: new RedditRepository(env.DB),
+        now: () => NOW,
+      }),
+    ).resolves.toMatchObject({
+      action: 'quarantined_mismatched_candidate',
+      quarantinedCandidateCount: 1,
+    });
+    expect(quarantine).toHaveBeenCalledWith('t3_synthetic1', NOW.toISOString());
+  });
+
+  it('does not count a re-seen quarantined candidate as queued', async () => {
+    await expect(
+      runScheduledRedditDiscovery({
+        subreddits: ['syntheticTransit'],
+        query: 'mrt OR train',
+        discoveryTransport: { fetchCandidates: async () => discoveryResult() },
+        conversationTransport: { fetchConversation: vi.fn() },
+        candidateQueue: {
+          enqueue: async () => ({ queued: false }),
+          getOldest: async () => null,
+          remove: vi.fn(),
+          recordPermanentHydrationFailure: vi.fn(),
+          quarantine: vi.fn(),
+        },
+        schedule: {
+          getNextSubreddit: async () => 'syntheticTransit',
+          advanceAfterSearch: vi.fn(),
+        },
+        repository: new RedditRepository(env.DB),
+        now: () => NOW,
+      }),
+    ).resolves.toMatchObject({
+      action: 'searched',
+      candidateCount: 1,
+      queuedCandidateCount: 0,
+    });
   });
 });

@@ -98,6 +98,7 @@ export type ThreadWorkflowCheckResult =
   | {
       outcome: 'transport_error';
       category: RedditTransportError['category'];
+      status: number | null;
       delivery: SourceDeliveryResult;
     };
 
@@ -157,7 +158,12 @@ export async function runThreadWorkflowCheck(options: {
       };
     }
     if (error instanceof RedditTransportError) {
-      return { outcome: 'transport_error', category: error.category, delivery };
+      return {
+        outcome: 'transport_error',
+        category: error.category,
+        status: error.metadata?.status ?? null,
+        delivery,
+      };
     }
     throw error;
   }

@@ -5,8 +5,9 @@ Reddit post and reply monitoring for MRTDown crowd reports.
 > The repository currently contains a Cloudflare Worker scaffold, validated
 > boundary contracts, the initial D1 repository, and bounded public-shadow
 > RSS search/conversation transports with D1-backed discovery and conversation
-> snapshot services. Public-shadow discovery is wired to a five-minute
-> scheduled handler with durable D1-backed rate-limit and stop state. A
+> snapshot services. Public-shadow discovery is wired to a one-minute
+> scheduled handler with a durable D1-backed one-request-per-minute RSS budget,
+> deferred candidate hydration, and stop state. A
 > legacy-compatible rail filter and validated Workers AI semantic parser now
 > evaluate stored posts against the site's D1-cached reference catalog and
 > durably select reports. Authenticated, bounded site delivery records
@@ -87,9 +88,12 @@ The paired site plan is:
 
 ### Discovery
 
-Run discovery every five minutes initially. Search both configured subreddits
-with a broad rail query, then apply cheap keyword filters and a semantic
-relevance parser. Repeated discovery of the same post must not create another
+Run discovery every minute. The public-shadow RSS budget permits one shared
+request per minute across scheduled discovery and all thread Workflows. A
+scheduled invocation either searches the next persisted configured subreddit or
+hydrates one previously found candidate through its authoritative conversation
+feed. Search candidates are stored as identities only until hydration can happen
+in a later minute. Repeated discovery of the same post must not create another
 record, report, or Workflow.
 
 The existing crawler's RSS search is the proven discovery baseline. Keep it in
@@ -202,10 +206,15 @@ feed is normalized as one root plus flat replies; shadow mode does not infer or
 reconstruct comment nesting.
 
 There must be no automatic fallback from OAuth to public access. Shadow mode
-must remain conservative, honor `Retry-After` and cache validators, and stop on
-`401`, `403`, repeated `429`, unexpected content types, or sustained response
-shape failures. Switch to OAuth when credentials become available without
-changing stored source identities or external report IDs.
+must remain conservative, honor `Retry-After`, cache validators, and the shared
+one-minute RSS cadence, and stop on `401`, `403`, repeated `429`, unexpected
+content types, or sustained response shape failures. Deferred candidates and
+paused Workflow checks resume later instead of being discarded. Repeatedly
+missing candidate feeds are quarantined after three `404` or `410` responses;
+an authoritative root/subreddit mismatch is quarantined immediately;
+selected-thread Workflow checks continue their fixed schedule rather than
+retrying those permanent misses forever. Switch to OAuth when credentials become
+available without changing stored source identities or external report IDs.
 
 ## Observed Volume
 

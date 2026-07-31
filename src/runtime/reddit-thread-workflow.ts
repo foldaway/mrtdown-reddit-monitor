@@ -67,16 +67,31 @@ export class RedditThreadWorkflow extends WorkflowEntrypoint<
         `wait until +${offsetMinutes}m`,
         new Date(startedAt + offsetMinutes * 60_000),
       );
-      const outcome = await step.do(`check +${offsetMinutes}m`, async () =>
-        runThreadWorkflowRuntime(this.env, parameters),
-      );
-      console.log(
-        JSON.stringify({
-          event: 'reddit_thread_workflow_check',
-          offsetMinutes,
-          ...outcome,
-        }),
-      );
+      let retryCount = 0;
+      while (true) {
+        const attemptName =
+          retryCount === 0
+            ? `check +${offsetMinutes}m`
+            : `retry +${offsetMinutes}m #${retryCount}`;
+        const outcome = await step.do(attemptName, async () =>
+          runThreadWorkflowRuntime(this.env, parameters),
+        );
+        console.log(
+          JSON.stringify({
+            event: 'reddit_thread_workflow_check',
+            offsetMinutes,
+            retryCount,
+            ...outcome,
+          }),
+        );
+        const resumeAt = outcome.resumeAt;
+        if (!shouldRetryRssCheck(outcome) || resumeAt === null) break;
+        retryCount += 1;
+        await step.sleepUntil(
+          `wait for RSS budget +${offsetMinutes}m #${retryCount}`,
+          new Date(resumeAt),
+        );
+      }
     }
 
     await step.do('record completion', async () =>
@@ -147,8 +162,11 @@ export async function runThreadWorkflowRuntime(
       deliveryTransport,
       now: dependencies.now,
     });
+    const accessState = await accessRepository.getState();
     return {
       ...outcome,
+      resumeAt: accessState?.blockedUntil ?? null,
+      disabled: accessState?.disabledReason != null,
       metrics: await collectRuntimeMetrics({
         repository,
         accessRepository,
@@ -180,6 +198,21 @@ export async function runThreadWorkflowRuntime(
     }
     throw error;
   }
+}
+
+function shouldRetryRssCheck(outcome: {
+  outcome: string;
+  resumeAt: string | null;
+  disabled: boolean;
+  status?: number | null;
+}): boolean {
+  const permanentlyMissing = outcome.status === 404 || outcome.status === 410;
+  return (
+    (outcome.outcome === 'paused' || outcome.outcome === 'transport_error') &&
+    !outcome.disabled &&
+    !permanentlyMissing &&
+    outcome.resumeAt !== null
+  );
 }
 
 function parseThreadWorkflowParameters(

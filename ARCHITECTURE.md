@@ -2,7 +2,7 @@
 
 Status: Intended minimal runtime boundary
 
-Last verified: 2026-07-20
+Last verified: 2026-07-31
 
 ## System context
 
@@ -27,10 +27,12 @@ validation harnesses, validated contracts, the first D1 repository slice, and
 bounded public-shadow RSS transports for search and selected conversations.
 A discovery service accepts only validated search-feed identities, skips known
 threads, resolves new identities through the selected post's RSS feed, verifies
-the normalized root, and stores its source version in D1. A five-minute
+the normalized root, and stores its source version in D1. A one-minute
 scheduled handler wires that service to public-shadow transports through a
-durable access policy. The policy pauses requests until `Retry-After` or quota
-reset, and disables shadow access after terminal or repeated unsafe responses.
+durable access policy. Every scheduled or Workflow RSS request reserves the
+shared one-minute budget before its outbound fetch. The policy preserves a
+longer `Retry-After` or quota-reset pause and disables shadow access after
+terminal or repeated unsafe responses.
 A conversation snapshot service stores the root and flat replies without
 guessing parent relationships or treating feed absence as removal. Runtime
 configuration, Reddit responses, semantic-parser decisions, site
@@ -68,7 +70,10 @@ validated contracts -> D1 repository -> discovery/workflow services -> Worker en
   together with parsing, delivery state, and one briefly cached site reference
   catalog. Raw source text is cleared after evaluation and purged across
   versions when Reddit reports removal.
-- **Discovery service** finds and evaluates new candidate posts.
+- **Discovery service** persists the next community independently of elapsed
+  time, searches it or hydrates one durable candidate identity per scheduled
+  RSS opportunity, then evaluates new posts. Repeatedly missing candidates are
+  quarantined without retaining source content.
 - **Workflow service** reserves a deterministic Cloudflare instance ID for each
   selected thread, recovers an already-created instance after an ambiguous
   create response, and revisits that thread at the fixed polling schedule.
@@ -79,7 +84,8 @@ validated contracts -> D1 repository -> discovery/workflow services -> Worker en
   emitting aggregate-only metrics after each safe outcome.
   Scheduled discovery starts selected thread monitors after durable delivery;
   each Workflow snapshots, evaluates, and delivers only its own thread.
-  Normalized Reddit pause and transport failures do not abort a check, while
+  Normalized Reddit pause and transport failures defer a Workflow check to the
+  durable resume time rather than dropping it, while
   semantic inference, storage, and programming failures retry the durable step.
 
 Reddit transport, parsing, time, and site transport should be injected so tests
@@ -103,6 +109,14 @@ it; do not pre-build a generic event-processing framework.
   fixtures.
 - An edited root post is versioned and re-evaluated like a changed reply;
   absence from an RSS snapshot is not evidence of deletion.
+- Public-shadow RSS attempts are atomically limited to one shared request per
+  minute. Search identities remain durable until their conversation feed is
+  fetched or they become stale because the thread is already stored.
+- A candidate receiving three permanent missing (`404` or `410`) conversation
+  responses is quarantined so it cannot block later discovery. A selected
+  thread receiving those statuses advances to its next fixed Workflow check.
+- A hydrated root that fails its queued identity or subreddit boundary check is
+  quarantined immediately instead of being retried indefinitely.
 
 D1 uniqueness constraints and short transactions should enforce these rules.
 Do not add claims, lifecycle events, support aggregation, generalized leases,

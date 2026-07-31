@@ -10,8 +10,8 @@ import {
   RedditTransportError,
 } from '../services/public-shadow-reddit-transport.js';
 import {
-  type RedditDiscoveryResult,
-  runRedditDiscovery,
+  type ScheduledRedditDiscoveryResult,
+  runScheduledRedditDiscovery,
 } from '../services/reddit-discovery.js';
 import {
   evaluatePendingSources,
@@ -36,13 +36,15 @@ import {
 } from '../services/workers-ai-semantic-parser.js';
 import { collectRuntimeMetrics } from '../services/runtime-metrics.js';
 import { RedditAccessRepository } from '../storage/reddit-access-repository.js';
+import { RedditDiscoveryCandidateRepository } from '../storage/reddit-discovery-candidate-repository.js';
+import { RedditDiscoveryScheduleRepository } from '../storage/reddit-discovery-schedule-repository.js';
 import { ReferenceCatalogRepository } from '../storage/reference-catalog-repository.js';
 import { RedditRepository } from '../storage/reddit-repository.js';
 
 export type ScheduledDiscoveryOutcome =
   | {
       outcome: 'completed';
-      discovery: RedditDiscoveryResult;
+      discovery: ScheduledRedditDiscoveryResult;
       evaluation: SourceEvaluationResult;
       delivery: SourceDeliveryResult;
       workflowStart: ThreadWorkflowStartResult;
@@ -103,6 +105,8 @@ export async function runScheduledDiscovery(
     now: dependencies.now,
   });
   const accessRepository = new RedditAccessRepository(env.DB);
+  const candidateQueue = new RedditDiscoveryCandidateRepository(env.DB);
+  const schedule = new RedditDiscoveryScheduleRepository(env.DB);
   const repository = new RedditRepository(env.DB);
   const guardedTransport = new BackoffAwarePublicShadowRedditTransport(
     discoveryTransport,
@@ -112,10 +116,12 @@ export async function runScheduledDiscovery(
   );
 
   try {
-    const discovery = await runRedditDiscovery({
+    const discovery = await runScheduledRedditDiscovery({
       ...config.discovery,
       discoveryTransport: guardedTransport,
       conversationTransport: guardedTransport,
+      candidateQueue,
+      schedule,
       repository,
       now: dependencies.now,
     });
