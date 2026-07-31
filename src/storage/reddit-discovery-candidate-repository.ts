@@ -2,12 +2,16 @@ import type { RedditDiscoveryCandidate } from '../contracts/reddit-search-atom.j
 
 const THREAD_EXTERNAL_ID_PATTERN = /^t3_[a-z0-9]+$/;
 const SUBREDDIT_PATTERN = /^[A-Za-z0-9_]{1,21}$/;
+const MAXIMUM_HYDRATION_FAILURES = 3;
 
 export interface StoredRedditDiscoveryCandidate {
   threadExternalId: string;
   subreddit: string;
   firstDiscoveredAt: string;
   lastDiscoveredAt: string;
+  hydrationFailureCount: number;
+  hydrationStatus: 'pending' | 'quarantined';
+  lastHydrationFailureAt: string | null;
 }
 
 export class RedditDiscoveryCandidateStorageError extends Error {
@@ -62,9 +66,11 @@ export class RedditDiscoveryCandidateRepository {
     try {
       row = await this.database
         .prepare(
-          `SELECT thread_external_id, subreddit, first_discovered_at, last_discovered_at
+          `SELECT thread_external_id, subreddit, first_discovered_at, last_discovered_at,
+                  hydration_failure_count, hydration_status, last_hydration_failure_at
            FROM reddit_discovery_candidates
-           ORDER BY first_discovered_at ASC, thread_external_id ASC
+           WHERE hydration_status = 'pending'
+           ORDER BY hydration_failure_count ASC, first_discovered_at ASC, thread_external_id ASC
            LIMIT 1`,
         )
         .first<Record<string, unknown>>();
@@ -87,6 +93,38 @@ export class RedditDiscoveryCandidateRepository {
       throw new RedditDiscoveryCandidateStorageError('write_failed');
     }
   }
+
+  async recordPermanentHydrationFailure(
+    threadExternalId: string,
+    failedAt: string,
+  ): Promise<{ quarantined: boolean }> {
+    validateThreadExternalId(threadExternalId);
+    const timestamp = normalizeTimestamp(failedAt);
+    let row: Record<string, unknown> | null;
+    try {
+      row = await this.database
+        .prepare(
+          `UPDATE reddit_discovery_candidates
+           SET hydration_failure_count = hydration_failure_count + 1,
+               hydration_status = CASE
+                 WHEN hydration_failure_count >= ? THEN 'quarantined'
+                 ELSE 'pending'
+               END,
+               last_hydration_failure_at = ?
+           WHERE thread_external_id = ?
+           RETURNING hydration_status`,
+        )
+        .bind(MAXIMUM_HYDRATION_FAILURES - 1, timestamp, threadExternalId)
+        .first<Record<string, unknown>>();
+    } catch {
+      throw new RedditDiscoveryCandidateStorageError('write_failed');
+    }
+    if (row === null)
+      throw new RedditDiscoveryCandidateStorageError('write_failed');
+    return {
+      quarantined: parseHydrationStatus(row.hydration_status) === 'quarantined',
+    };
+  }
 }
 
 function parseCandidate(
@@ -100,6 +138,11 @@ function parseCandidate(
       subreddit,
       firstDiscoveredAt: parseTimestamp(row.first_discovered_at),
       lastDiscoveredAt: parseTimestamp(row.last_discovered_at),
+      hydrationFailureCount: nonNegativeInteger(row.hydration_failure_count),
+      hydrationStatus: parseHydrationStatus(row.hydration_status),
+      lastHydrationFailureAt: parseNullableTimestamp(
+        row.last_hydration_failure_at,
+      ),
     };
   } catch (error) {
     if (error instanceof RedditDiscoveryCandidateStorageError) throw error;
@@ -137,6 +180,20 @@ function parseSubreddit(value: unknown): string {
   return value;
 }
 
+function parseHydrationStatus(value: unknown): 'pending' | 'quarantined' {
+  if (value !== 'pending' && value !== 'quarantined') {
+    throw new TypeError('Invalid hydration status');
+  }
+  return value;
+}
+
+function nonNegativeInteger(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new TypeError('Invalid non-negative integer');
+  }
+  return value;
+}
+
 function normalizeTimestamp(value: string): string {
   if (
     typeof value !== 'string' ||
@@ -151,4 +208,8 @@ function normalizeTimestamp(value: string): string {
 function parseTimestamp(value: unknown): string {
   if (typeof value !== 'string') throw new TypeError('Invalid timestamp');
   return normalizeTimestamp(value);
+}
+
+function parseNullableTimestamp(value: unknown): string | null {
+  return value === null ? null : parseTimestamp(value);
 }

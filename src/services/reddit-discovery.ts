@@ -5,6 +5,7 @@ import type {
   PublicConversationFetchResult,
   PublicDiscoveryFetchResult,
 } from './public-shadow-reddit-transport.js';
+import { RedditTransportError } from './public-shadow-reddit-transport.js';
 
 interface DiscoveryTransport {
   fetchCandidates(
@@ -40,6 +41,18 @@ interface DiscoveryCandidateQueue {
     subreddit: string;
   } | null>;
   remove(threadExternalId: string): Promise<void>;
+  recordPermanentHydrationFailure(
+    threadExternalId: string,
+    failedAt: string,
+  ): Promise<{ quarantined: boolean }>;
+}
+
+interface DiscoverySchedule {
+  getNextSubreddit(subreddits: string[]): Promise<string>;
+  advanceAfterSearch(
+    searchedSubreddit: string,
+    subreddits: string[],
+  ): Promise<void>;
 }
 
 export interface RedditDiscoveryOptions {
@@ -57,6 +70,7 @@ export interface ScheduledRedditDiscoveryOptions {
   discoveryTransport: DiscoveryTransport;
   conversationTransport: ConversationTransport;
   candidateQueue: DiscoveryCandidateQueue;
+  schedule: DiscoverySchedule;
   repository: DiscoveryRepository;
   now: () => Date;
 }
@@ -73,13 +87,19 @@ export interface RedditDiscoveryResult {
 }
 
 export interface ScheduledRedditDiscoveryResult {
-  action: 'searched' | 'hydrated' | 'discarded_stale_candidate';
+  action:
+    | 'searched'
+    | 'hydrated'
+    | 'discarded_stale_candidate'
+    | 'deferred_permanent_hydration_failure';
   feedCount: number;
   candidateCount: number;
   rejectedFeedEntryCount: number;
   duplicateCandidateCount: number;
   existingThreadCount: number;
   queuedCandidateCount: number;
+  permanentHydrationFailureCount: number;
+  quarantinedCandidateCount: number;
   fetchedConversationCount: number;
   insertedSourceVersionCount: number;
   repeatedSourceVersionCount: number;
@@ -184,9 +204,25 @@ export async function runScheduledRedditDiscovery(
       };
     }
 
-    const conversation = await options.conversationTransport.fetchConversation(
-      candidate.threadExternalId,
-    );
+    let conversation: PublicConversationFetchResult;
+    try {
+      conversation = await options.conversationTransport.fetchConversation(
+        candidate.threadExternalId,
+      );
+    } catch (error) {
+      if (!isPermanentMissingConversation(error)) throw error;
+      const failed =
+        await options.candidateQueue.recordPermanentHydrationFailure(
+          candidate.threadExternalId,
+          seenAt,
+        );
+      return {
+        ...emptyScheduledResult('deferred_permanent_hydration_failure'),
+        candidateCount: 1,
+        permanentHydrationFailureCount: 1,
+        quarantinedCandidateCount: failed.quarantined ? 1 : 0,
+      };
+    }
     if (conversation.kind !== 'conversation') {
       throw new RedditDiscoveryError('conversation_missing');
     }
@@ -211,7 +247,7 @@ export async function runScheduledRedditDiscovery(
     };
   }
 
-  const subreddit = selectSubreddit(options.subreddits, options.now);
+  const subreddit = await options.schedule.getNextSubreddit(options.subreddits);
   const fetched = await options.discoveryTransport.fetchCandidates(
     subreddit,
     options.query,
@@ -234,6 +270,7 @@ export async function runScheduledRedditDiscovery(
     await options.candidateQueue.enqueue(feedCandidate, seenAt);
     result.queuedCandidateCount += 1;
   }
+  await options.schedule.advanceAfterSearch(subreddit, options.subreddits);
   return result;
 }
 
@@ -248,20 +285,20 @@ function emptyScheduledResult(
     duplicateCandidateCount: 0,
     existingThreadCount: 0,
     queuedCandidateCount: 0,
+    permanentHydrationFailureCount: 0,
+    quarantinedCandidateCount: 0,
     fetchedConversationCount: 0,
     insertedSourceVersionCount: 0,
     repeatedSourceVersionCount: 0,
   };
 }
 
-function selectSubreddit(subreddits: string[], now: () => Date): string {
-  if (subreddits.length === 0) throw new TypeError('No discovery subreddits');
-  const timestamp = now();
-  if (!(timestamp instanceof Date) || !Number.isFinite(timestamp.valueOf())) {
-    throw new TypeError('Invalid current time');
-  }
-  const minute = Math.floor(timestamp.valueOf() / 60_000);
-  return subreddits[minute % subreddits.length] as string;
+function isPermanentMissingConversation(error: unknown): boolean {
+  return (
+    error instanceof RedditTransportError &&
+    error.category === 'unexpected_status' &&
+    (error.metadata?.status === 404 || error.metadata?.status === 410)
+  );
 }
 
 function matchesCandidate(

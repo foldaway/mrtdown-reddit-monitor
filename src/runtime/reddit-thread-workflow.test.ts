@@ -83,7 +83,14 @@ describe('Reddit thread Workflow runtime', () => {
                 resumeAt: RETRY_AT,
                 disabled: false,
               }
-            : { outcome: 'completed' },
+            : offsetMinutes === 25
+              ? {
+                  outcome: 'transport_error',
+                  status: 404,
+                  resumeAt: RETRY_AT,
+                  disabled: false,
+                }
+              : { outcome: 'completed' },
         );
       }
       await modifier.mockStepResult(
@@ -111,7 +118,14 @@ describe('Reddit thread Workflow runtime', () => {
               resumeAt: RETRY_AT,
               disabled: false,
             }
-          : { outcome: 'completed' },
+          : offsetMinutes === 25
+            ? {
+                outcome: 'transport_error',
+                status: 404,
+                resumeAt: RETRY_AT,
+                disabled: false,
+              }
+            : { outcome: 'completed' },
       );
     }
     await expect(

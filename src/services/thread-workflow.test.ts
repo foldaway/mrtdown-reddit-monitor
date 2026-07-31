@@ -9,6 +9,7 @@ import {
 } from '../domain/source-identity.js';
 import { RedditRepository } from '../storage/reddit-repository.js';
 import { runThreadWorkflowCheck } from './thread-workflow.js';
+import { RedditTransportError } from './public-shadow-reddit-transport.js';
 import { syntheticRedditConversationFeed } from '../../test/fixtures/reddit-conversation-feed.js';
 
 const NOW = new Date('2026-07-20T01:00:00.000Z');
@@ -94,5 +95,35 @@ describe('thread Workflow checks', () => {
     });
     expect(parse).toHaveBeenCalledOnce();
     expect(deliver).toHaveBeenCalledOnce();
+  });
+
+  it('retains the permanent upstream status on a transport failure', async () => {
+    await expect(
+      runThreadWorkflowCheck({
+        threadExternalId: 't3_synthetic1',
+        repository: new RedditRepository(testEnv.DB),
+        conversationTransport: {
+          fetchConversation: async () => {
+            throw new RedditTransportError('unexpected_status', {
+              status: 404,
+              contentType: null,
+              responseBytes: 0,
+              etag: null,
+              lastModified: null,
+              retryAfterAt: null,
+              rateLimitRemaining: null,
+              rateLimitResetAt: null,
+            });
+          },
+        },
+        semanticParser: { parse: vi.fn() },
+        deliveryTransport: { deliver: vi.fn() },
+        now: () => NOW,
+      }),
+    ).resolves.toMatchObject({
+      outcome: 'transport_error',
+      category: 'unexpected_status',
+      status: 404,
+    });
   });
 });

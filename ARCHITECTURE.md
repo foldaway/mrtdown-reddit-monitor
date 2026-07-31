@@ -70,8 +70,10 @@ validated contracts -> D1 repository -> discovery/workflow services -> Worker en
   together with parsing, delivery state, and one briefly cached site reference
   catalog. Raw source text is cleared after evaluation and purged across
   versions when Reddit reports removal.
-- **Discovery service** searches one community or hydrates one durable candidate
-  identity per scheduled RSS opportunity, then evaluates new posts.
+- **Discovery service** persists the next community independently of elapsed
+  time, searches it or hydrates one durable candidate identity per scheduled
+  RSS opportunity, then evaluates new posts. Repeatedly missing candidates are
+  quarantined without retaining source content.
 - **Workflow service** reserves a deterministic Cloudflare instance ID for each
   selected thread, recovers an already-created instance after an ambiguous
   create response, and revisits that thread at the fixed polling schedule.
@@ -110,6 +112,9 @@ it; do not pre-build a generic event-processing framework.
 - Public-shadow RSS attempts are atomically limited to one shared request per
   minute. Search identities remain durable until their conversation feed is
   fetched or they become stale because the thread is already stored.
+- A candidate receiving three permanent missing (`404` or `410`) conversation
+  responses is quarantined so it cannot block later discovery. A selected
+  thread receiving those statuses advances to its next fixed Workflow check.
 
 D1 uniqueness constraints and short transactions should enforce these rules.
 Do not add claims, lifecycle events, support aggregation, generalized leases,

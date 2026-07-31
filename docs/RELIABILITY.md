@@ -25,6 +25,10 @@ Last verified: 2026-07-31
   minute. Search candidates remain queued until a later minute can fetch their
   authoritative conversation feed, and paused or transient Workflow checks
   wait and retry at the recorded resume time.
+- Scheduled subreddit rotation is durable and advances only after a successful
+  search, so deferred hydration does not bias coverage. A candidate with three
+  permanent missing responses is quarantined; `404` and `410` thread checks do
+  not retry within a Workflow step.
 - Semantic inference or output-validation failure leaves source evaluation
   pending so a later invocation can retry without changing its content version.
 - The site's current reference catalog is cached in D1 for its advertised
@@ -64,8 +68,9 @@ D1-backed tests now cover discovery replay, candidate/conversation identity
 verification, flat conversation snapshot replay, edited root posts, RSS absence
 semantics, repeated storage, one-Workflow-identity behavior, source-version
 deduplication, durable pending delivery, quota exhaustion, repeated rate limits,
-one-minute atomic RSS reservations, deferred candidate hydration, Workflow
-retry after a paused check, sustained malformed responses, scheduled backoff replay, cheap-filter
+one-minute atomic RSS reservations, persistent subreddit rotation, deferred
+candidate hydration/quarantine, Workflow retry after a paused check, permanent
+missing-thread progression, sustained malformed responses, scheduled backoff replay, cheap-filter
 rejection, validated semantic selection, inference retry, site retry timing,
 catalog refresh and stale fallback, terminal delivery state, acknowledgement,
 and local Workflow completion across every fixed schedule step. Before shadow traffic, run the

@@ -204,10 +204,13 @@ function shouldRetryRssCheck(outcome: {
   outcome: string;
   resumeAt: string | null;
   disabled: boolean;
+  status?: number | null;
 }): boolean {
+  const permanentlyMissing = outcome.status === 404 || outcome.status === 410;
   return (
     (outcome.outcome === 'paused' || outcome.outcome === 'transport_error') &&
     !outcome.disabled &&
+    !permanentlyMissing &&
     outcome.resumeAt !== null
   );
 }

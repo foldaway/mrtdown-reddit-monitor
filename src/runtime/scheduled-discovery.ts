@@ -37,6 +37,7 @@ import {
 import { collectRuntimeMetrics } from '../services/runtime-metrics.js';
 import { RedditAccessRepository } from '../storage/reddit-access-repository.js';
 import { RedditDiscoveryCandidateRepository } from '../storage/reddit-discovery-candidate-repository.js';
+import { RedditDiscoveryScheduleRepository } from '../storage/reddit-discovery-schedule-repository.js';
 import { ReferenceCatalogRepository } from '../storage/reference-catalog-repository.js';
 import { RedditRepository } from '../storage/reddit-repository.js';
 
@@ -105,6 +106,7 @@ export async function runScheduledDiscovery(
   });
   const accessRepository = new RedditAccessRepository(env.DB);
   const candidateQueue = new RedditDiscoveryCandidateRepository(env.DB);
+  const schedule = new RedditDiscoveryScheduleRepository(env.DB);
   const repository = new RedditRepository(env.DB);
   const guardedTransport = new BackoffAwarePublicShadowRedditTransport(
     discoveryTransport,
@@ -119,6 +121,7 @@ export async function runScheduledDiscovery(
       discoveryTransport: guardedTransport,
       conversationTransport: guardedTransport,
       candidateQueue,
+      schedule,
       repository,
       now: dependencies.now,
     });

@@ -90,11 +90,11 @@ The paired site plan is:
 
 Run discovery every minute. The public-shadow RSS budget permits one shared
 request per minute across scheduled discovery and all thread Workflows. A
-scheduled invocation either searches one configured subreddit or hydrates one
-previously found candidate through its authoritative conversation feed. Search
-candidates are stored as identities only until hydration can happen in a later
-minute. Repeated discovery of the same post must not create another record,
-report, or Workflow.
+scheduled invocation either searches the next persisted configured subreddit or
+hydrates one previously found candidate through its authoritative conversation
+feed. Search candidates are stored as identities only until hydration can happen
+in a later minute. Repeated discovery of the same post must not create another
+record, report, or Workflow.
 
 The existing crawler's RSS search is the proven discovery baseline. Keep it in
 place until this monitor demonstrates equivalent coverage.
@@ -209,9 +209,11 @@ There must be no automatic fallback from OAuth to public access. Shadow mode
 must remain conservative, honor `Retry-After`, cache validators, and the shared
 one-minute RSS cadence, and stop on `401`, `403`, repeated `429`, unexpected
 content types, or sustained response shape failures. Deferred candidates and
-paused Workflow checks resume later instead of being discarded. Switch to OAuth
-when credentials become available without changing stored source identities or
-external report IDs.
+paused Workflow checks resume later instead of being discarded. Repeatedly
+missing candidate feeds are quarantined after three `404` or `410` responses;
+selected-thread Workflow checks continue their fixed schedule rather than
+retrying those permanent misses forever. Switch to OAuth when credentials become
+available without changing stored source identities or external report IDs.
 
 ## Observed Volume
 
